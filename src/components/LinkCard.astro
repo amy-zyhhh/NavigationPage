@@ -1,0 +1,113 @@
+---
+interface Props {
+  name: string;
+  url: string;
+  category: string;
+  description: string;
+  tag: string;
+  icon?: string;
+}
+
+const { name, url, category, description, tag, icon } = Astro.props;
+const searchText = `${name} ${category} ${description} ${tag}`.toLowerCase();
+const hasIcon = typeof icon === "string" && icon.trim().length > 0;
+const favicon = hasIcon ? `https://${icon.trim()}/favicon.ico` : undefined;
+const accentMap: Record<string, string> = {
+  "开发工具": "rgba(64, 190, 178, 0.92)",
+  "文档资料": "rgba(92, 151, 225, 0.92)",
+  "设计资源": "rgba(232, 120, 139, 0.92)",
+  "AI 工具": "rgba(156, 127, 228, 0.92)",
+  "效率工具": "rgba(234, 174, 76, 0.92)",
+  "学习资源": "rgba(119, 194, 108, 0.92)",
+  "清华入口": "rgba(255, 133, 164, 0.92)",
+  "常用工具": "rgba(64, 202, 235, 0.92)",
+  "学术资源": "rgba(126, 148, 255, 0.92)",
+  "其他": "rgba(153, 204, 128, 0.92)",
+};
+const accent = accentMap[category] ?? "rgba(64, 190, 178, 0.92)";
+---
+
+<article class="link-card" style={`--card-accent: ${accent}`} data-card data-category={category} data-search={searchText}>
+  <a href={url} target="_blank" rel="noreferrer" aria-label={name} title={name}>
+    {favicon && <img src={favicon} alt="" loading="lazy" width="18" height="18" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />}
+    <span class="fallback-icon" hidden={hasIcon} aria-hidden="true"></span>
+    <h3>{name}</h3>
+  </a>
+</article>
+
+<style>
+  .link-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    transition:
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .link-card::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--card-accent);
+    content: "";
+  }
+
+  .link-card:hover {
+    border-color: color-mix(in srgb, var(--card-accent), var(--line) 22%);
+    transform: translateY(-1px);
+  }
+
+  .link-card[hidden] {
+    display: none;
+  }
+
+  .link-card a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 44px;
+    padding: 8px 14px 8px 15px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+  }
+
+  .fallback-icon {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--card-accent);
+  }
+
+  .fallback-icon[hidden] {
+    display: none;
+  }
+
+  h3 {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 1.05rem;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 720px) {
+    .link-card a {
+      min-height: 42px;
+      padding: 8px 12px 8px 14px;
+    }
+  }
+</style>

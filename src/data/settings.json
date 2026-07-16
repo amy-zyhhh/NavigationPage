@@ -1,0 +1,16 @@
+{
+  "theme": {
+    "default": "system",
+    "storageKey": "navigation-theme"
+  },
+  "shortcuts": {
+    "focusSearch": "/",
+    "clearSearch": "Escape",
+    "toggleTheme": "t"
+  },
+  "webSearch": {
+    "prefix": "/",
+    "url": "https://www.bing.com/search?q={query}",
+    "target": "_blank"
+  }
+}

@@ -1,0 +1,499 @@
+---
+import LinkCard from "../components/LinkCard.astro";
+import linksYaml from "../data/links.yaml?raw";
+import settings from "../data/settings.json";
+import { parseYamlLinks, type Link } from "../utils/parseLinks";
+
+const links = parseYamlLinks(linksYaml);
+const sortedLinks = [...links].sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999) || a.name.localeCompare(b.name));
+const pinnedLinks = sortedLinks.filter((link) => link.pinned);
+const categories = Array.from(new Set(sortedLinks.map((link) => link.category)));
+const groups = categories.map((category) => ({
+  category,
+  links: sortedLinks.filter((link) => link.category === category),
+}));
+const shortcuts = settings.shortcuts;
+---
+
+<html
+	lang="zh-CN"
+	data-default-theme={settings.theme.default}
+	data-theme-storage-key={settings.theme.storageKey}
+	data-shortcut-search={shortcuts.focusSearch}
+	data-shortcut-clear={shortcuts.clearSearch}
+	data-shortcut-theme={shortcuts.toggleTheme}
+	data-web-search-prefix={settings.webSearch.prefix}
+	data-web-search-url={settings.webSearch.url}
+	data-web-search-target={settings.webSearch.target}
+>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>我的导航</title>
+	</head>
+	<body>
+		<main class="shell">
+			<section class="toolbar" aria-label="筛选工具">
+				<form class="search" id="searchForm" role="search">
+					<label for="searchInput">搜索</label>
+					<input id="searchInput" type="search" placeholder="搜索导航，输入 /关键词 后回车搜索 Bing" autocomplete="off" />
+				</form>
+				<div class="actions">
+					<label class="theme-control">
+						<span>主题</span>
+						<button class="theme-button" id="themeButton" type="button" aria-label="切换深浅色">
+							<span class="theme-track" aria-hidden="true">
+								<span class="theme-thumb"></span>
+							</span>
+						</button>
+					</label>
+				</div>
+			</section>
+
+			<div class="sections">
+				<section class="link-section search-results" data-search-section hidden>
+					<h2>搜索结果</h2>
+					<div class="grid">
+						{sortedLinks.map((link: Link) => <LinkCard {...link} />)}
+					</div>
+				</section>
+
+				{
+					pinnedLinks.length > 0 && (
+						<section class="link-section" data-section data-section-kind="pinned">
+							<h2>置顶</h2>
+							<div class="grid">
+								{pinnedLinks.map((link: Link) => <LinkCard {...link} />)}
+							</div>
+						</section>
+					)
+				}
+
+				{
+					groups.map((group) => (
+						<section class="link-section" data-section data-section-kind="category" data-category={group.category}>
+							<h2>{group.category}</h2>
+							<div class="grid">
+								{group.links.map((link: Link) => <LinkCard {...link} />)}
+							</div>
+						</section>
+					))
+				}
+			</div>
+
+			<p class="empty" id="emptyState" hidden>没有找到匹配的入口。</p>
+		</main>
+
+		<script>
+			const root = document.documentElement;
+			const searchForm = document.querySelector("#searchForm");
+			const searchInput = document.querySelector("#searchInput");
+			const cards = Array.from(document.querySelectorAll("[data-card]"));
+			const searchSection = document.querySelector("[data-search-section]");
+			const searchCards = Array.from(searchSection.querySelectorAll("[data-card]"));
+			const normalSections = Array.from(document.querySelectorAll("[data-section]"));
+			const emptyState = document.querySelector("#emptyState");
+			const themeButton = document.querySelector("#themeButton");
+			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+			const defaultTheme = root.dataset.defaultTheme || "system";
+			const webSearch = {
+				prefix: root.dataset.webSearchPrefix || "/",
+				url: root.dataset.webSearchUrl || "https://www.bing.com/search?q={query}",
+				target: root.dataset.webSearchTarget || "_blank",
+			};
+			const shortcuts = {
+				focusSearch: root.dataset.shortcutSearch || "/",
+				clearSearch: root.dataset.shortcutClear || "Escape",
+				toggleTheme: root.dataset.shortcutTheme || "t",
+			};
+
+			function systemTheme() {
+				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+			}
+
+			function resolveTheme(theme) {
+				return theme === "system" ? systemTheme() : theme;
+			}
+
+			function setTheme(theme) {
+				root.dataset.theme = resolveTheme(theme);
+				root.dataset.themeChoice = theme;
+				localStorage.setItem(storageKey, theme);
+			}
+
+			function toggleTheme() {
+				const current = root.dataset.themeChoice || defaultTheme;
+				setTheme(resolveTheme(current) === "dark" ? "light" : "dark");
+			}
+
+			function getWebSearchQuery(value) {
+				const trimmed = value.trim();
+				if (!trimmed.startsWith(webSearch.prefix)) return "";
+				return trimmed.slice(webSearch.prefix.length).trim();
+			}
+
+			function getLocalSearchKeyword(value) {
+				const trimmed = value.trim();
+				const keyword = trimmed.startsWith(webSearch.prefix)
+					? trimmed.slice(webSearch.prefix.length).trim()
+					: trimmed;
+				return keyword.toLowerCase();
+			}
+
+			function openWebSearch(query) {
+				const searchUrl = webSearch.url.replace("{query}", encodeURIComponent(query));
+				window.open(searchUrl, webSearch.target, "noopener,noreferrer");
+			}
+
+			function updateCards() {
+				const keyword = getLocalSearchKeyword(searchInput.value);
+				let visibleCount = 0;
+				const isSearching = keyword.length > 0;
+
+				normalSections.forEach((section) => {
+					section.hidden = isSearching;
+				});
+				searchSection.hidden = !isSearching;
+
+				searchCards.forEach((card) => {
+					const searchText = card.dataset.search;
+					const isVisible = isSearching && searchText.includes(keyword);
+
+					card.hidden = !isVisible;
+					if (isVisible) visibleCount += 1;
+				});
+
+				cards.forEach((card) => {
+					if (!searchSection.contains(card)) card.hidden = false;
+				});
+
+				emptyState.hidden = !isSearching || visibleCount > 0;
+			}
+
+			setTheme(localStorage.getItem(storageKey) || defaultTheme);
+			searchInput.addEventListener("input", updateCards);
+			searchForm.addEventListener("submit", (event) => {
+				const query = getWebSearchQuery(searchInput.value);
+				event.preventDefault();
+				if (!query) return;
+
+				openWebSearch(query);
+			});
+			themeButton.addEventListener("click", toggleTheme);
+			window.addEventListener("keydown", (event) => {
+				const key = event.key;
+				const isTyping = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName || "");
+
+				if (key === shortcuts.focusSearch && !isTyping) {
+					event.preventDefault();
+					searchInput.focus();
+					return;
+				}
+
+				if (key === shortcuts.clearSearch && document.activeElement === searchInput) {
+					searchInput.value = "";
+					updateCards();
+					searchInput.blur();
+					return;
+				}
+
+				if (key.toLowerCase() === shortcuts.toggleTheme.toLowerCase() && !isTyping) {
+					toggleTheme();
+				}
+			});
+		</script>
+	</body>
+</html>
+
+<style>
+	:root {
+		color-scheme: light;
+		--bg: #f7f5f0;
+		--bg-grid: rgba(34, 41, 43, 0.035);
+		--panel: #fffdf8;
+		--card: #ffffff;
+		--text: #1d2928;
+		--muted: #64706d;
+		--line: #ddd7cc;
+		--accent: #267f86;
+		--accent-strong: #155e63;
+		--warm: #b9603b;
+		--shadow: 0 18px 48px rgba(34, 41, 43, 0.12);
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			"Microsoft YaHei", "PingFang SC", sans-serif;
+	}
+
+	:root[data-theme="dark"] {
+		color-scheme: dark;
+		--bg: #171b1d;
+		--bg-grid: rgba(255, 255, 255, 0.045);
+		--panel: #202629;
+		--card: #22282b;
+		--text: #edf1ef;
+		--muted: #a9b3b0;
+		--line: #354044;
+		--accent: #6db5b8;
+		--accent-strong: #9ed5d7;
+		--warm: #e0a071;
+		--shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+		background:
+			linear-gradient(var(--bg-grid) 1px, transparent 1px),
+			linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+			linear-gradient(135deg, rgba(38, 127, 134, 0.08), transparent 32%),
+			linear-gradient(315deg, rgba(185, 96, 59, 0.09), transparent 34%),
+			var(--bg);
+		background-size:
+			28px 28px,
+			28px 28px,
+			auto,
+			auto,
+			auto;
+		color: var(--text);
+	}
+
+	button,
+	input {
+		font: inherit;
+	}
+
+	.shell {
+		width: min(1180px, calc(100% - 32px));
+		margin: 0 auto;
+		padding: 24px 0 48px;
+	}
+
+	.toolbar {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		display: grid;
+		align-items: end;
+		grid-template-columns: minmax(260px, 1fr) auto;
+		gap: 12px;
+		margin-bottom: 18px;
+		padding: 12px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background:
+			linear-gradient(135deg, rgba(38, 127, 134, 0.08), transparent 42%),
+			color-mix(in srgb, var(--panel), transparent 7%);
+		backdrop-filter: blur(12px);
+	}
+
+	.search {
+		display: grid;
+		gap: 8px;
+	}
+
+	.search label,
+	.theme-control span {
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 700;
+		line-height: 1;
+	}
+
+	.search input {
+		width: 100%;
+		height: 38px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--card);
+		color: var(--text);
+		padding: 10px 12px;
+		outline: none;
+		transition:
+			border-color 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.search input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 4px rgba(38, 127, 134, 0.14);
+	}
+
+	.actions {
+		display: flex;
+		align-items: end;
+		justify-content: end;
+		gap: 10px;
+	}
+
+	.theme-control {
+		display: grid;
+		gap: 8px;
+	}
+
+	.theme-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 52px;
+		height: 36px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: var(--card);
+		color: var(--muted);
+		cursor: pointer;
+		padding: 0;
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease,
+			transform 160ms ease;
+	}
+
+	.theme-button:hover {
+		transform: translateY(-1px);
+	}
+
+	.theme-button {
+		flex: 0 0 auto;
+		color: var(--accent-strong);
+		line-height: 1;
+	}
+
+	.theme-track {
+		position: relative;
+		width: 34px;
+		height: 18px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #f0c86e, #7aa7b8);
+	}
+
+	.theme-thumb {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 12px;
+		height: 12px;
+		border-radius: 999px;
+		background: #fff8df;
+		transition:
+			background 160ms ease,
+			transform 160ms ease;
+	}
+
+	:root[data-theme="dark"] .theme-thumb {
+		background: #d9eef0;
+		transform: translateX(16px);
+	}
+
+	.sections {
+		display: grid;
+		gap: 22px;
+	}
+
+	.link-section {
+		display: grid;
+		gap: 10px;
+	}
+
+	.link-section[hidden] {
+		display: none;
+	}
+
+	.link-section h2 {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.78rem;
+		font-weight: 800;
+		letter-spacing: 0;
+		text-transform: uppercase;
+	}
+
+	.link-section h2::after {
+		height: 1px;
+		flex: 1;
+		background: var(--line);
+		content: "";
+		opacity: 0.65;
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+		gap: 10px;
+	}
+
+	.empty {
+		margin: 36px 0 0;
+		color: var(--muted);
+		text-align: center;
+	}
+
+	@media (max-width: 820px) {
+		.toolbar {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 720px) {
+		.shell {
+			width: min(100% - 24px, 1180px);
+			padding-top: 12px;
+		}
+
+		.toolbar {
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 10px;
+			margin-bottom: 14px;
+			padding: 10px;
+			position: static;
+		}
+
+		.actions {
+			align-items: end;
+			flex-direction: row;
+		}
+
+		.search input {
+			height: 36px;
+			padding: 8px 10px;
+		}
+
+		.theme-button {
+			width: 48px;
+			height: 34px;
+		}
+
+		.sections {
+			gap: 18px;
+		}
+
+		.grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 9px;
+		}
+	}
+
+	@media (max-width: 359px) {
+		.toolbar {
+			grid-template-columns: 1fr;
+		}
+
+		.actions {
+			justify-content: start;
+		}
+
+		.grid {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>
