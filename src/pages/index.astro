@@ -217,8 +217,9 @@ const shortcuts = settings.shortcuts;
 <style>
 	:root {
 		color-scheme: light;
-		--bg: #f7f5f0;
-		--bg-grid: rgba(34, 41, 43, 0.035);
+		--bg: #f8f7f3;
+		--bg-grid: rgba(43, 54, 52, 0.045);
+		--bg-grid-soft: rgba(43, 54, 52, 0.024);
 		--panel: #fffdf8;
 		--card: #ffffff;
 		--text: #1d2928;
@@ -235,8 +236,9 @@ const shortcuts = settings.shortcuts;
 
 	:root[data-theme="dark"] {
 		color-scheme: dark;
-		--bg: #171b1d;
-		--bg-grid: rgba(255, 255, 255, 0.045);
+		--bg: #171c1d;
+		--bg-grid: rgba(236, 242, 238, 0.05);
+		--bg-grid-soft: rgba(236, 242, 238, 0.026);
 		--panel: #202629;
 		--card: #22282b;
 		--text: #edf1ef;
@@ -256,17 +258,29 @@ const shortcuts = settings.shortcuts;
 		margin: 0;
 		min-height: 100vh;
 		background:
+			linear-gradient(135deg, rgba(38, 127, 134, 0.1) 0%, transparent 34%),
+			linear-gradient(315deg, rgba(185, 96, 59, 0.08) 0%, transparent 38%),
 			linear-gradient(var(--bg-grid) 1px, transparent 1px),
 			linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
-			linear-gradient(135deg, rgba(38, 127, 134, 0.08), transparent 32%),
-			linear-gradient(315deg, rgba(185, 96, 59, 0.09), transparent 34%),
+			linear-gradient(var(--bg-grid-soft) 1px, transparent 1px),
+			linear-gradient(90deg, var(--bg-grid-soft) 1px, transparent 1px),
 			var(--bg);
 		background-size:
-			28px 28px,
-			28px 28px,
 			auto,
 			auto,
+			32px 32px,
+			32px 32px,
+			8px 8px,
+			8px 8px,
 			auto;
+		background-position:
+			center top,
+			center bottom,
+			center top,
+			center top,
+			center top,
+			center top,
+			center;
 		color: var(--text);
 	}
 
