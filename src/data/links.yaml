@@ -28,6 +28,13 @@
   tag: 门户
   order: 20
   icon: info.tsinghua.edu.cn
+- name: SNS
+  url: https://wiki.thusns.net
+  category: 清华入口
+  description: SNS Wiki 入口。
+  tag: SNS
+  order: 30
+  icon: wiki.thusns.net
 - name: DeepL
   url: https://www.deepl.com/translator
   category: 常用工具
@@ -63,10 +70,3 @@
   tag: 数据库
   order: 70
   icon: webofscience.com
-- name: SNS
-  url: https://wiki.thusns.net
-  category: 其他
-  description: SNS Wiki 入口。
-  tag: SNS
-  order: 110
-  icon: wiki.thusns.net
