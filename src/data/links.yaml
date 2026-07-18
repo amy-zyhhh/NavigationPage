@@ -63,3 +63,10 @@
   tag: 数据库
   order: 70
   icon: webofscience.com
+- name: SNS
+  url: https://wiki.thusns.net
+  category: 其他
+  description: SNS Wiki 入口。
+  tag: SNS
+  order: 110
+  icon: wiki.thusns.net
