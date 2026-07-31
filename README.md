@@ -5,7 +5,7 @@
 访问地址：
 
 ```text
-https://amy-zyhhh.github.io/NavigationPage/
+https://amy-zyhhh.github.io/pages/
 ```
 
 ## 当前功能
@@ -37,7 +37,7 @@ npm.cmd run dev
 本地地址通常是：
 
 ```text
-http://localhost:4321/NavigationPage/
+http://localhost:4321/pages/
 ```
 
 检查能否正常构建：
@@ -83,7 +83,7 @@ src/data/links.yaml
 首页“其他”分组里的“加密导航”卡片会提示输入密码。密码正确后会跳转到独立的加密导航页：
 
 ```text
-https://amy-zyhhh.github.io/NavigationPage/protected/
+https://amy-zyhhh.github.io/pages/protected/
 ```
 
 错误 3 次后会临时锁定 5 分钟。加密导航使用浏览器前端校验，适合防止随手打开，不适合保存真正敏感内容。
@@ -158,12 +158,12 @@ src/data/settings.json
 astro.config.mjs
 ```
 
-当前配置适用于普通仓库 `NavigationPage`：
+当前配置适用于普通仓库 `pages`：
 
 ```js
 export default defineConfig({
   site: "https://amy-zyhhh.github.io",
-  base: "/NavigationPage",
+  base: "/pages",
 });
 ```
 
