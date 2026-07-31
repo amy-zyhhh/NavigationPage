@@ -57,21 +57,15 @@ const shortcuts = settings.shortcuts;
 	<body>
 		<main class="shell">
 			<section class="toolbar" aria-label="筛选工具">
+				<label class="protected-control">
+					<span>返回</span>
+					<a class="nav-button" href={basePath} aria-label="返回普通导航">←</a>
+				</label>
 				<form class="search" id="searchForm" role="search">
 					<label for="searchInput">搜索</label>
 					<input id="searchInput" type="search" placeholder="搜索导航、blogs" autocomplete="off" />
 				</form>
 				<div class="actions">
-					<label class="protected-control">
-						<span>返回</span>
-						<a class="nav-button" href={basePath} aria-label="返回普通导航">←</a>
-					</label>
-					<label class="protected-control">
-						<span>锁定</span>
-						<button class="protected-button" id="lockButton" type="button" aria-label="锁定加密导航">
-							<span aria-hidden="true">×</span>
-						</button>
-					</label>
 					<label class="theme-control">
 						<span>主题</span>
 						<button class="theme-button" id="themeButton" type="button" aria-label="切换深浅色">
@@ -133,8 +127,7 @@ const shortcuts = settings.shortcuts;
 			const normalSections = Array.from(document.querySelectorAll("[data-section]"));
 			const emptyState = document.querySelector("#emptyState");
 			const themeButton = document.querySelector("#themeButton");
-			const lockButton = document.querySelector("#lockButton");
-			if (!searchForm || !searchInput || !searchSection || !emptyState || !themeButton || !lockButton) {
+			if (!searchForm || !searchInput || !searchSection || !emptyState || !themeButton) {
 				throw new Error("Protected navigation controls are incomplete.");
 			}
 			const searchCards = Array.from(searchSection.querySelectorAll("[data-card]"));
@@ -198,10 +191,6 @@ const shortcuts = settings.shortcuts;
 				event.preventDefault();
 			});
 			themeButton.addEventListener("click", toggleTheme);
-			lockButton.addEventListener("click", () => {
-				sessionStorage.removeItem(unlockedStorageKey);
-				window.location.href = homeUrl;
-			});
 			window.addEventListener("keydown", (event) => {
 				const key = event.key;
 				const isTyping = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName || "");
@@ -314,7 +303,7 @@ const shortcuts = settings.shortcuts;
 		z-index: 2;
 		display: grid;
 		align-items: end;
-		grid-template-columns: minmax(260px, 1fr) auto;
+		grid-template-columns: auto minmax(260px, 1fr) auto;
 		gap: 12px;
 		margin-bottom: 18px;
 		padding: 12px;
@@ -370,10 +359,10 @@ const shortcuts = settings.shortcuts;
 	.theme-control {
 		display: grid;
 		gap: 8px;
+		justify-items: center;
 	}
 
 	.nav-button,
-	.protected-button,
 	.theme-button {
 		display: flex;
 		align-items: center;
@@ -395,15 +384,8 @@ const shortcuts = settings.shortcuts;
 	}
 
 	.nav-button:hover,
-	.protected-button:hover,
 	.theme-button:hover {
 		transform: translateY(-1px);
-	}
-
-	.protected-button {
-		font-size: 1.1rem;
-		font-weight: 800;
-		line-height: 1;
 	}
 
 	.theme-track {
@@ -500,7 +482,7 @@ const shortcuts = settings.shortcuts;
 		}
 
 		.toolbar {
-			grid-template-columns: minmax(0, 1fr) auto;
+			grid-template-columns: auto minmax(0, 1fr) auto;
 			gap: 10px;
 			margin-bottom: 14px;
 			padding: 10px;
@@ -518,7 +500,6 @@ const shortcuts = settings.shortcuts;
 		}
 
 		.nav-button,
-		.protected-button,
 		.theme-button {
 			width: 48px;
 			height: 34px;
@@ -536,10 +517,11 @@ const shortcuts = settings.shortcuts;
 
 	@media (max-width: 430px) {
 		.toolbar {
-			grid-template-columns: 1fr;
+			grid-template-columns: auto minmax(0, 1fr);
 		}
 
 		.actions {
+			grid-column: 2;
 			justify-content: start;
 		}
 	}
