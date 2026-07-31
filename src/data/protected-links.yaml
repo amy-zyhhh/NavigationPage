@@ -1,11 +1,11 @@
-- name: 星辰大道
+- name: XCDD
   url: https://sudugu.org/1863
   category: 其他
   description: 星辰大道页面入口。
   tag: 小说
   order: 10
   icon: sudugu.org
-- name: 无敌天命
+- name: WDTM
   url: https://sudugu.org/1667
   category: 其他
   description: 无敌天命页面入口。
@@ -19,3 +19,10 @@
   tag: 视频
   order: 30
   icon: moontv.test260729.cloud-ip.cc
+- name: blogs
+  url: ../blogs/
+  category: 项目
+  description: 个人博客页面入口。
+  tag: 博客
+  order: 5
+  target: _self

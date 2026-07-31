@@ -1,8 +1,11 @@
 ---
+import BlogPreviewCard from "../components/BlogPreviewCard.astro";
 import LinkCard from "../components/LinkCard.astro";
 import protectedLinksYaml from "../data/protected-links.yaml?raw";
 import settings from "../data/settings.json";
+import { parseBlogPosts } from "../utils/blogPosts";
 import { parseYamlLinks, type Link } from "../utils/parseLinks";
+import { linkToSearchCard, type SearchCardItem } from "../utils/searchItems";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
 	? import.meta.env.BASE_URL
@@ -14,6 +17,21 @@ const groups = categories.map((category) => ({
 	category,
 	links: sortedLinks.filter((link) => link.category === category),
 }));
+const blogModules = import.meta.glob("../../blogs/*.md", {
+	query: "?raw",
+	import: "default",
+	eager: true,
+});
+const blogPosts = parseBlogPosts(blogModules);
+const explicitlyIncludedProtectedSearchItems: SearchCardItem[] = [];
+// Search scope: protected links, blog posts, and the explicit list above.
+// Future content types must be added here deliberately before this search box can see them.
+// Display order is intentional: link-like cards first, then blog previews.
+const protectedSearchLinkItems: SearchCardItem[] = [
+	...sortedLinks.map(linkToSearchCard),
+	...explicitlyIncludedProtectedSearchItems,
+];
+const protectedSearchBlogPosts = blogPosts;
 const shortcuts = settings.shortcuts;
 ---
 
@@ -34,14 +52,14 @@ const shortcuts = settings.shortcuts;
 		<link rel="icon" href={`${basePath}favicon.ico`} />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
-		<title>加密导航</title>
+		<title>我的导航</title>
 	</head>
 	<body>
 		<main class="shell">
 			<section class="toolbar" aria-label="筛选工具">
 				<form class="search" id="searchForm" role="search">
 					<label for="searchInput">搜索</label>
-					<input id="searchInput" type="search" placeholder="搜索加密导航" autocomplete="off" />
+					<input id="searchInput" type="search" placeholder="搜索导航、blogs" autocomplete="off" />
 				</form>
 				<div class="actions">
 					<label class="protected-control">
@@ -68,8 +86,13 @@ const shortcuts = settings.shortcuts;
 			<div class="sections">
 				<section class="link-section search-results" data-search-section hidden>
 					<h2>搜索结果</h2>
-					<div class="grid">
-						{sortedLinks.map((link: Link) => <LinkCard {...link} />)}
+					<div class="search-group" data-search-group>
+						<div class="grid">
+							{protectedSearchLinkItems.map((item) => <LinkCard {...item} />)}
+						</div>
+					</div>
+					<div class="search-group blog-result-group" data-search-group>
+						{protectedSearchBlogPosts.map((post) => <BlogPreviewCard post={post} basePath={basePath} />)}
 					</div>
 				</section>
 
@@ -106,6 +129,7 @@ const shortcuts = settings.shortcuts;
 			const searchInput = document.querySelector("#searchInput");
 			const cards = Array.from(document.querySelectorAll("[data-card]"));
 			const searchSection = document.querySelector("[data-search-section]");
+			const searchGroups = Array.from(document.querySelectorAll("[data-search-group]"));
 			const normalSections = Array.from(document.querySelectorAll("[data-section]"));
 			const emptyState = document.querySelector("#emptyState");
 			const themeButton = document.querySelector("#themeButton");
@@ -155,6 +179,10 @@ const shortcuts = settings.shortcuts;
 
 					card.hidden = !isVisible;
 					if (isVisible) visibleCount += 1;
+				});
+
+				searchGroups.forEach((group) => {
+					group.hidden = !Array.from(group.querySelectorAll("[data-card]")).some((card) => !card.hidden);
 				});
 
 				cards.forEach((card) => {
@@ -416,6 +444,15 @@ const shortcuts = settings.shortcuts;
 
 	.link-section[hidden] {
 		display: none;
+	}
+
+	.search-group[hidden] {
+		display: none;
+	}
+
+	.blog-result-group {
+		display: grid;
+		gap: 10px;
 	}
 
 	.link-section h2 {

@@ -4,6 +4,7 @@ import ProtectedCard from "../components/ProtectedCard.astro";
 import linksYaml from "../data/links.yaml?raw";
 import settings from "../data/settings.json";
 import { parseYamlLinks, type Link } from "../utils/parseLinks";
+import { linkToSearchCard, type SearchCardItem } from "../utils/searchItems";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
 	? import.meta.env.BASE_URL
@@ -17,6 +18,9 @@ const groups = categories.map((category) => ({
   category,
   links: sortedLinks.filter((link) => link.category === category),
 }));
+// Search scope: home page links only. Web search is handled separately by the / prefix.
+// Future content types must be added here explicitly before this search box can see them.
+const homeSearchItems: SearchCardItem[] = sortedLinks.map(linkToSearchCard);
 const shortcuts = settings.shortcuts;
 ---
 
@@ -69,7 +73,7 @@ const shortcuts = settings.shortcuts;
 				<section class="link-section search-results" data-search-section hidden>
 					<h2>搜索结果</h2>
 					<div class="grid">
-						{sortedLinks.map((link: Link) => <LinkCard {...link} />)}
+						{homeSearchItems.map((link) => <LinkCard {...link} />)}
 					</div>
 				</section>
 

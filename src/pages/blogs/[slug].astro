@@ -1,0 +1,261 @@
+---
+import settings from "../../data/settings.json";
+import { parseBlogPosts, parseMarkdownBlocks, type BlogPost } from "../../utils/blogPosts";
+
+export function getStaticPaths() {
+	const modules = import.meta.glob("../../../blogs/*.md", {
+		query: "?raw",
+		import: "default",
+		eager: true,
+	});
+	const posts = parseBlogPosts(modules);
+
+	return posts.map((post) => ({
+		params: { slug: post.slug },
+		props: { post },
+	}));
+}
+
+const { post } = Astro.props as { post: BlogPost };
+const blocks = parseMarkdownBlocks(post.body);
+const basePath = import.meta.env.BASE_URL.endsWith("/")
+	? import.meta.env.BASE_URL
+	: `${import.meta.env.BASE_URL}/`;
+---
+
+<html
+	lang="zh-CN"
+	class="locked"
+	data-default-theme={settings.theme.default}
+	data-theme-storage-key={settings.theme.storageKey}
+	data-unlocked-storage-key={settings.protectedAccess.storageKey}
+	data-home-url={basePath}
+>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href={`${basePath}favicon.svg`} />
+		<link rel="icon" href={`${basePath}favicon.ico`} />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>我的导航</title>
+	</head>
+	<body>
+		<main class="shell">
+			<nav class="topbar" aria-label="博客导航">
+				<a href={`${basePath}blogs/`}>返回</a>
+				<span>blogs</span>
+			</nav>
+
+			<article class="post">
+				<div class="post-meta">
+					<time datetime={post.date}>{post.date}</time>
+					<a href={`${basePath}blogs/category/${encodeURIComponent(post.category)}/`}>{post.category}</a>
+				</div>
+				<h1>{post.title}</h1>
+				{post.summary && <p class="summary">{post.summary}</p>}
+
+				<div class="content">
+					{blocks.map((block) =>
+						block.type === "paragraph" ? (
+							<p>{block.text}</p>
+						) : (
+							<ul>
+								{block.items.map((item) => <li>{item}</li>)}
+							</ul>
+						)
+					)}
+				</div>
+			</article>
+		</main>
+
+		<script>
+			const root = document.documentElement;
+			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+			const defaultTheme = root.dataset.defaultTheme || "system";
+			const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
+			const homeUrl = root.dataset.homeUrl || "/";
+
+			if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
+				window.location.replace(homeUrl);
+			} else {
+				root.classList.remove("locked");
+			}
+
+			function systemTheme() {
+				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+			}
+
+			function resolveTheme(theme) {
+				return theme === "system" ? systemTheme() : theme;
+			}
+
+			const theme = localStorage.getItem(storageKey) || defaultTheme;
+			root.dataset.theme = resolveTheme(theme);
+		</script>
+	</body>
+</html>
+
+<style>
+	:root {
+		color-scheme: light;
+		--bg: #f8f7f3;
+		--bg-grid: rgba(43, 54, 52, 0.045);
+		--bg-grid-soft: rgba(43, 54, 52, 0.024);
+		--panel: #fffdf8;
+		--card: #ffffff;
+		--text: #1d2928;
+		--muted: #64706d;
+		--line: #ddd7cc;
+		--accent: #267f86;
+		--accent-strong: #155e63;
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			"Microsoft YaHei", "PingFang SC", sans-serif;
+	}
+
+	:root[data-theme="dark"] {
+		color-scheme: dark;
+		--bg: #171c1d;
+		--bg-grid: rgba(236, 242, 238, 0.05);
+		--bg-grid-soft: rgba(236, 242, 238, 0.026);
+		--panel: #202629;
+		--card: #22282b;
+		--text: #edf1ef;
+		--muted: #a9b3b0;
+		--line: #354044;
+		--accent: #6db5b8;
+		--accent-strong: #9ed5d7;
+	}
+
+	.locked body {
+		visibility: hidden;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+		background:
+			linear-gradient(135deg, rgba(38, 127, 134, 0.1) 0%, transparent 34%),
+			linear-gradient(315deg, rgba(185, 96, 59, 0.08) 0%, transparent 38%),
+			linear-gradient(var(--bg-grid) 1px, transparent 1px),
+			linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+			linear-gradient(var(--bg-grid-soft) 1px, transparent 1px),
+			linear-gradient(90deg, var(--bg-grid-soft) 1px, transparent 1px),
+			var(--bg);
+		background-size:
+			auto,
+			auto,
+			32px 32px,
+			32px 32px,
+			8px 8px,
+			8px 8px,
+			auto;
+		color: var(--text);
+	}
+
+	.shell {
+		width: min(860px, calc(100% - 32px));
+		margin: 0 auto;
+		padding: 24px 0 48px;
+	}
+
+	.topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 18px;
+		padding: 12px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--panel), transparent 7%);
+		backdrop-filter: blur(12px);
+	}
+
+	.topbar a {
+		color: var(--accent-strong);
+		font-weight: 800;
+		text-decoration: none;
+	}
+
+	.topbar span {
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 800;
+	}
+
+	.post {
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--card);
+		padding: 22px;
+	}
+
+	.post-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 10px;
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 700;
+	}
+
+	.post-meta a {
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		color: var(--accent-strong);
+		padding: 2px 8px;
+		text-decoration: none;
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.7rem;
+		line-height: 1.25;
+		letter-spacing: 0;
+	}
+
+	p,
+	li {
+		color: var(--text);
+		line-height: 1.75;
+	}
+
+	p {
+		margin: 12px 0 0;
+	}
+
+	.summary {
+		color: var(--muted);
+	}
+
+	.content {
+		margin-top: 18px;
+	}
+
+	ul {
+		margin: 12px 0 0;
+		padding-left: 1.2rem;
+	}
+
+	@media (max-width: 720px) {
+		.shell {
+			width: min(100% - 24px, 860px);
+			padding-top: 12px;
+		}
+
+		.post {
+			padding: 17px;
+		}
+
+		h1 {
+			font-size: 1.45rem;
+		}
+	}
+</style>

@@ -6,12 +6,15 @@ interface Props {
   description: string;
   tag: string;
   icon?: string;
+  target?: string;
 }
 
-const { name, url, category, description, tag, icon } = Astro.props;
+const { name, url, category, description, tag, icon, target } = Astro.props;
 const searchText = `${name} ${category} ${description} ${tag}`.toLowerCase();
 const hasIcon = typeof icon === "string" && icon.trim().length > 0;
 const favicon = hasIcon ? `https://${icon.trim()}/favicon.ico` : undefined;
+const linkTarget = target ?? "_blank";
+const rel = linkTarget === "_blank" ? "noopener noreferrer" : undefined;
 const accentMap: Record<string, string> = {
   "开发工具": "rgba(64, 190, 178, 0.92)",
   "文档资料": "rgba(92, 151, 225, 0.92)",
@@ -28,7 +31,7 @@ const accent = accentMap[category] ?? "rgba(64, 190, 178, 0.92)";
 ---
 
 <article class="link-card" style={`--card-accent: ${accent}`} data-card data-category={category} data-search={searchText}>
-  <a href={url} target="_blank" rel="noopener noreferrer" aria-label={name} title={name}>
+  <a href={url} target={linkTarget} rel={rel} aria-label={name} title={name}>
     {favicon && <img src={favicon} alt="" loading="lazy" width="18" height="18" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />}
     <span class="fallback-icon" hidden={hasIcon} aria-hidden="true"></span>
     <h3>{name}</h3>

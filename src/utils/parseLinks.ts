@@ -7,6 +7,7 @@ export interface Link {
   order?: number;
   pinned?: boolean;
   icon?: string;
+  target?: string;
 }
 
 export function parseYamlLinks(source: string): Link[] {
