@@ -5,6 +5,13 @@ export interface BlogPost {
 	summary: string;
 	body: string;
 	slug: string;
+	sourcePath: string;
+}
+
+export interface BlogHeading {
+	depth: number;
+	id: string;
+	text: string;
 }
 
 export type BlogBlock =
@@ -63,8 +70,35 @@ export function parseMarkdownBlocks(body: string): BlogBlock[] {
 	return blocks;
 }
 
+export function parseBlogHeadings(body: string): BlogHeading[] {
+	const used = new Map<string, number>();
+
+	return body
+		.split(/\r?\n/)
+		.map((line) => line.match(/^(#{1,4})\s+(.+?)\s*#*$/))
+		.filter((match): match is RegExpMatchArray => Boolean(match))
+		.map((match) => {
+			const text = match[2].replace(/<[^>]+>/g, "").trim();
+			const baseId = slugifyHeading(text);
+			const count = used.get(baseId) ?? 0;
+			used.set(baseId, count + 1);
+
+			return {
+				depth: match[1].length,
+				id: count === 0 ? baseId : `${baseId}-${count}`,
+				text,
+			};
+		});
+}
+
 function parseBlogPost(path: string, raw: string): BlogPost {
-	const slug = path.split("/").pop()?.replace(/\.md$/, "") ?? "post";
+	const slug = path
+		.replace(/\\/g, "/")
+		.replace(/^.*?\/blogs\//, "")
+		.replace(/\.md$/, "")
+		.split("/")
+		.map(toSlugPart)
+		.join("/");
 	const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
 	const frontmatter = match?.[1] ?? "";
 	const body = (match?.[2] ?? raw).trim();
@@ -76,7 +110,12 @@ function parseBlogPost(path: string, raw: string): BlogPost {
 		category: readField(frontmatter, "category") || "未分类",
 		summary: readField(frontmatter, "summary") || "",
 		body,
+		sourcePath: path,
 	};
+}
+
+function toSlugPart(value: string) {
+	return value.trim().replace(/\s+/g, "-");
 }
 
 function readField(frontmatter: string, key: string) {
@@ -88,4 +127,12 @@ function readField(frontmatter: string, key: string) {
 
 function normalizeDate(value: string) {
 	return value.replace(/\D/g, "").slice(0, 8);
+}
+
+function slugifyHeading(value: string) {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}\s-]/gu, "")
+		.replace(/\s+/g, "-") || "section";
 }

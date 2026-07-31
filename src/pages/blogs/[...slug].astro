@@ -1,0 +1,597 @@
+---
+import settings from "../../data/settings.json";
+import { parseBlogHeadings, parseBlogPosts, type BlogPost } from "../../utils/blogPosts";
+
+type MarkdownModule = {
+	Content: unknown;
+};
+
+export function getStaticPaths() {
+	const modules = import.meta.glob("../../../blogs/**/*.md", {
+		query: "?raw",
+		import: "default",
+		eager: true,
+	});
+	const markdownModules = import.meta.glob<MarkdownModule>("../../../blogs/**/*.md", {
+		eager: true,
+	});
+	const posts = parseBlogPosts(modules);
+
+	return posts.map((post) => {
+		const markdownModule = markdownModules[post.sourcePath];
+		if (!markdownModule) {
+			throw new Error(`Missing Markdown module for ${post.sourcePath}`);
+		}
+
+		return {
+			params: { slug: post.slug },
+			props: { post, Content: markdownModule.Content },
+		};
+	});
+}
+
+const { post, Content } = Astro.props as { post: BlogPost; Content: AstroComponentFactory };
+const headings = parseBlogHeadings(post.body);
+const basePath = import.meta.env.BASE_URL.endsWith("/")
+	? import.meta.env.BASE_URL
+	: `${import.meta.env.BASE_URL}/`;
+const sidebarStorageKey = "navigation-blog-sidebar-hidden";
+---
+
+<html
+	lang="zh-CN"
+	class="locked"
+	data-default-theme={settings.theme.default}
+	data-theme-storage-key={settings.theme.storageKey}
+	data-unlocked-storage-key={settings.protectedAccess.storageKey}
+	data-home-url={basePath}
+	data-sidebar-storage-key={sidebarStorageKey}
+	data-heading-ids={JSON.stringify(headings.map((heading) => heading.id))}
+>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href={`${basePath}favicon.svg`} />
+		<link rel="icon" href={`${basePath}favicon.ico`} />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>我的导航</title>
+	</head>
+	<body>
+		<main class="shell">
+			<div class="reader">
+				<div class="article-column">
+					<nav class="topbar" aria-label="博客导航">
+						<div class="topbar-title">
+							<a href={`${basePath}blogs/`}>返回</a>
+							<span class="topbar-post-title">{post.title}</span>
+						</div>
+						<div class="topbar-actions">
+							<span>blogs</span>
+							<button class="sidebar-toggle" id="sidebarToggle" type="button" aria-controls="blogSidebar" aria-pressed="false">
+								目录
+							</button>
+						</div>
+					</nav>
+
+					<article class="post" id="top">
+						<div class="post-meta">
+							<time datetime={post.date}>{post.date}</time>
+							<a href={`${basePath}blogs/category/${encodeURIComponent(post.category)}/`}>{post.category}</a>
+						</div>
+						<h1>{post.title}</h1>
+						{post.summary && <p class="summary">{post.summary}</p>}
+
+						<div class="content">
+							<Content />
+						</div>
+					</article>
+				</div>
+
+				<aside class="sidebar" id="blogSidebar" aria-label="文章侧边栏">
+					<div class="sidebar-panel">
+						<div class="sidebar-meta">
+							<time datetime={post.date}>{post.date}</time>
+							<a href={`${basePath}blogs/category/${encodeURIComponent(post.category)}/`}>{post.category}</a>
+						</div>
+						{headings.length > 0 && (
+							<nav class="toc" aria-label="文章目录">
+								{headings.map((heading) => (
+									<a class={`toc-link depth-${heading.depth}`} href={`#${heading.id}`}>{heading.text}</a>
+								))}
+							</nav>
+						)}
+					</div>
+				</aside>
+			</div>
+		</main>
+
+		<script>
+			const root = document.documentElement;
+			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+			const defaultTheme = root.dataset.defaultTheme || "system";
+			const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
+			const homeUrl = root.dataset.homeUrl || "/";
+			const sidebarStorageKey = root.dataset.sidebarStorageKey || "navigation-blog-sidebar-hidden";
+			const sidebarToggle = document.querySelector("#sidebarToggle");
+			const tocLinks = Array.from(document.querySelectorAll(".toc-link"));
+			const headingIds = JSON.parse(root.dataset.headingIds || "[]");
+
+			if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
+				window.location.replace(homeUrl);
+			} else {
+				root.classList.remove("locked");
+			}
+
+			function systemTheme() {
+				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+			}
+
+			function resolveTheme(theme) {
+				return theme === "system" ? systemTheme() : theme;
+			}
+
+			const theme = localStorage.getItem(storageKey) || defaultTheme;
+			root.dataset.theme = resolveTheme(theme);
+
+			document.querySelectorAll(".content h1, .content h2, .content h3, .content h4").forEach((heading, index) => {
+				const id = headingIds[index];
+				if (id) heading.id = id;
+			});
+
+			function setActiveHeading() {
+				let activeId = headingIds[0];
+				for (const id of headingIds) {
+					const heading = document.getElementById(id);
+					if (heading && heading.getBoundingClientRect().top <= 120) {
+						activeId = id;
+					}
+				}
+
+				tocLinks.forEach((link) => {
+					link.classList.toggle("active", link.getAttribute("href") === `#${activeId}`);
+				});
+				root.dataset.scrolled = String(window.scrollY > 96);
+			}
+
+			function setSidebarHidden(isHidden) {
+				root.dataset.sidebarHidden = String(isHidden);
+				localStorage.setItem(sidebarStorageKey, String(isHidden));
+				sidebarToggle?.setAttribute("aria-pressed", String(isHidden));
+			}
+
+			setSidebarHidden(localStorage.getItem(sidebarStorageKey) === "true");
+			requestAnimationFrame(() => {
+				root.dataset.sidebarReady = "true";
+			});
+			sidebarToggle?.addEventListener("click", () => {
+				setSidebarHidden(root.dataset.sidebarHidden !== "true");
+			});
+			setActiveHeading();
+			window.addEventListener("scroll", setActiveHeading, { passive: true });
+		</script>
+	</body>
+</html>
+
+<style>
+	:root {
+		color-scheme: light;
+		--bg: #f8f7f3;
+		--panel: #fffdf8;
+		--card: #ffffff;
+		--text: #1d2928;
+		--muted: #64706d;
+		--line: #ddd7cc;
+		--accent: #267f86;
+		--accent-strong: #155e63;
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			"Microsoft YaHei", "PingFang SC", sans-serif;
+	}
+
+	:root[data-theme="dark"] {
+		color-scheme: dark;
+		--bg: #171c1d;
+		--panel: #202629;
+		--card: #22282b;
+		--text: #edf1ef;
+		--muted: #a9b3b0;
+		--line: #354044;
+		--accent: #6db5b8;
+		--accent-strong: #9ed5d7;
+	}
+
+	.locked body {
+		visibility: hidden;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+		background: var(--bg);
+		color: var(--text);
+	}
+
+	.shell {
+		width: min(1080px, calc(100% - 32px));
+		margin: 0 auto;
+		padding: 24px 0 48px;
+	}
+
+	.topbar {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 14px;
+		padding: 8px 10px;
+		border: 1px solid color-mix(in srgb, var(--line), transparent 35%);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--panel), transparent 3%);
+		box-shadow: 0 8px 20px rgba(29, 41, 40, 0.05);
+		backdrop-filter: blur(12px);
+	}
+
+	.topbar a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 34px;
+		flex: none;
+		color: var(--accent-strong);
+		font-weight: 800;
+		text-decoration: none;
+	}
+
+	.topbar-title {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		min-width: 0;
+	}
+
+	.topbar-title::before {
+		width: 1px;
+		height: 20px;
+		order: 2;
+		background: color-mix(in srgb, var(--line), transparent 12%);
+		content: "";
+		opacity: 0;
+		transition: opacity 0.16s ease;
+	}
+
+	:root[data-scrolled="true"] .topbar-title::before {
+		opacity: 1;
+	}
+
+	.topbar .topbar-post-title {
+		order: 3;
+		overflow: hidden;
+		color: var(--text);
+		font-size: 1.05rem;
+		font-weight: 800;
+		line-height: 1.25;
+		opacity: 0;
+		text-overflow: ellipsis;
+		transform: translateY(4px);
+		transition:
+			opacity 0.16s ease,
+			transform 0.16s ease;
+		white-space: nowrap;
+	}
+
+	:root[data-scrolled="true"] .topbar .topbar-post-title {
+		opacity: 1;
+		transform: translateY(0);
+	}
+
+	.topbar span {
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 800;
+	}
+
+	.topbar-actions {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.sidebar-toggle {
+		height: 34px;
+		border: 1px solid color-mix(in srgb, var(--line), transparent 18%);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--card), transparent 10%);
+		color: var(--accent-strong);
+		cursor: pointer;
+		padding: 0 14px;
+		font: inherit;
+		font-size: 0.86rem;
+		font-weight: 800;
+		transition:
+			border-color 0.16s ease,
+			background 0.16s ease,
+			transform 0.16s ease;
+	}
+
+	.sidebar-toggle:hover {
+		transform: translateY(-1px);
+	}
+
+	.reader {
+		display: grid;
+		align-items: start;
+		grid-template-columns: minmax(0, 720px) 238px;
+		gap: 16px;
+		justify-content: center;
+	}
+
+	:root[data-sidebar-ready="true"] .reader {
+		transition:
+			grid-template-columns 0.2s ease,
+			gap 0.2s ease;
+	}
+
+	:root[data-sidebar-hidden="true"] .reader {
+		grid-template-columns: minmax(0, 720px) 0;
+		gap: 0;
+	}
+
+	:root[data-sidebar-hidden="true"] .sidebar {
+		opacity: 0;
+		overflow: hidden;
+		pointer-events: none;
+		transform: translateX(12px);
+		visibility: hidden;
+	}
+
+	.article-column {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.sidebar {
+		position: sticky;
+		top: 18px;
+		min-width: 0;
+		opacity: 1;
+		transform: translateX(0);
+	}
+
+	:root[data-sidebar-ready="true"] .sidebar {
+		transition:
+			opacity 0.18s ease,
+			transform 0.2s ease,
+			visibility 0.2s ease;
+	}
+
+	.sidebar-panel {
+		display: grid;
+		gap: 12px;
+		width: 238px;
+		border: 0;
+		border-left: 2px solid color-mix(in srgb, var(--accent), transparent 58%);
+		border-radius: 0;
+		background: color-mix(in srgb, var(--panel), transparent 36%);
+		box-shadow: none;
+		max-height: calc(100vh - 36px);
+		overflow-x: hidden;
+		overflow-y: auto;
+		padding: 14px 0 14px 16px;
+	}
+
+	.sidebar-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		color: var(--muted);
+		font-size: 0.82rem;
+		font-weight: 700;
+	}
+
+	.sidebar-meta a {
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		color: var(--accent-strong);
+		padding: 2px 8px;
+		text-decoration: none;
+	}
+
+	.toc {
+		display: grid;
+		gap: 4px;
+		border-top: 1px solid color-mix(in srgb, var(--line), transparent 24%);
+		padding-top: 10px;
+	}
+
+	.toc-link {
+		position: relative;
+		display: block;
+		color: var(--muted);
+		border-radius: 6px;
+		padding: 4px 8px;
+		font-size: 0.88rem;
+		line-height: 1.45;
+		text-decoration: none;
+		transition:
+			color 0.16s ease,
+			transform 0.16s ease;
+	}
+
+	.toc-link::before {
+		position: absolute;
+		top: 8px;
+		bottom: 8px;
+		left: -17px;
+		width: 2px;
+		border-radius: 999px;
+		background: transparent;
+		content: "";
+		transition: background 0.16s ease;
+	}
+
+	.toc-link:hover {
+		color: var(--accent-strong);
+		transform: translateX(2px);
+	}
+
+	.toc-link.active {
+		color: var(--accent-strong);
+		font-weight: 800;
+	}
+
+	.toc-link.active::before {
+		background: var(--accent);
+	}
+
+	.toc-link.depth-2 {
+		margin-left: 10px;
+		font-size: 0.84rem;
+	}
+
+	.toc-link.depth-3 {
+		margin-left: 20px;
+		font-size: 0.82rem;
+	}
+
+	.toc-link.depth-4 {
+		margin-left: 30px;
+		font-size: 0.8rem;
+	}
+
+	.post {
+		border: 0;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--card), transparent 3%);
+		box-shadow: 0 8px 24px rgba(29, 41, 40, 0.045);
+		padding: 26px 28px 34px;
+	}
+
+	.post-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 10px;
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 700;
+	}
+
+	.post-meta a {
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		color: var(--accent-strong);
+		padding: 2px 8px;
+		text-decoration: none;
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.68rem;
+		line-height: 1.25;
+		letter-spacing: 0;
+	}
+
+	p,
+	li {
+		color: var(--text);
+		line-height: 1.82;
+	}
+
+	p {
+		margin: 12px 0 0;
+	}
+
+	.summary {
+		color: var(--muted);
+		border-bottom: 1px solid color-mix(in srgb, var(--line), transparent 30%);
+		padding-bottom: 16px;
+	}
+
+	.content {
+		margin-top: 22px;
+	}
+
+	.content :global(h1),
+	.content :global(h2),
+	.content :global(h3),
+	.content :global(h4) {
+		scroll-margin-top: 64px;
+	}
+
+	ul {
+		margin: 12px 0 0;
+		padding-left: 1.2rem;
+	}
+
+	.content :global(h1),
+	.content :global(h2),
+	.content :global(h3),
+	.content :global(h4) {
+		margin: 22px 0 0;
+		letter-spacing: 0;
+		line-height: 1.35;
+	}
+
+	.content :global(h1) {
+		margin-top: 30px;
+		font-size: 1.9rem;
+	}
+
+	.content :global(img) {
+		display: block;
+		width: var(--blog-image-width, min(100%, 760px));
+		height: auto;
+		margin: 16px auto 0;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--panel);
+	}
+
+	.content :global(pre) {
+		overflow-x: auto;
+		margin: 16px 0 0;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 14px;
+		background: var(--panel);
+	}
+
+	.content :global(code) {
+		font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+	}
+
+	@media (max-width: 720px) {
+		.shell {
+			width: min(100% - 24px, 860px);
+			padding-top: 12px;
+		}
+
+		.reader {
+			grid-template-columns: 1fr;
+		}
+
+		.topbar {
+			top: 0;
+		}
+
+		.sidebar {
+			position: static;
+		}
+
+		.post {
+			padding: 17px;
+		}
+
+		h1 {
+			font-size: 1.45rem;
+		}
+	}
+</style>

@@ -3,7 +3,7 @@ import settings from "../../../data/settings.json";
 import { parseBlogPosts, type BlogPost } from "../../../utils/blogPosts";
 
 export function getStaticPaths() {
-	const modules = import.meta.glob("../../../../blogs/*.md", {
+	const modules = import.meta.glob("../../../../blogs/**/*.md", {
 		query: "?raw",
 		import: "default",
 		eager: true,

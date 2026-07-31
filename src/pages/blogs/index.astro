@@ -6,7 +6,7 @@ import { blogPostSearchText } from "../../utils/searchItems";
 const basePath = import.meta.env.BASE_URL.endsWith("/")
 	? import.meta.env.BASE_URL
 	: `${import.meta.env.BASE_URL}/`;
-const modules = import.meta.glob("../../../blogs/*.md", {
+const modules = import.meta.glob("../../../blogs/**/*.md", {
 	query: "?raw",
 	import: "default",
 	eager: true,

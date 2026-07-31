@@ -204,7 +204,7 @@ const shortcuts = settings.shortcuts;
 					return;
 				}
 
-				const password = prompt("请输入加密导航密码");
+				const password = prompt("口令：");
 				if (password === null) return;
 
 				const passwordHash = await sha256Hex(password);
