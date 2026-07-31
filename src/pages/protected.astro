@@ -298,6 +298,8 @@ const shortcuts = settings.shortcuts;
 	}
 
 	.toolbar {
+		--control-label-height: 16px;
+		--control-height: 38px;
 		position: sticky;
 		top: 0;
 		z-index: 2;
@@ -317,21 +319,30 @@ const shortcuts = settings.shortcuts;
 
 	.search {
 		display: grid;
+		grid-template-rows: var(--control-label-height) var(--control-height);
 		gap: 8px;
 	}
 
 	.search label,
-	.protected-control span,
-	.theme-control span {
+	.protected-control > span,
+	.theme-control > span {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: var(--control-label-height);
 		color: var(--muted);
 		font-size: 0.86rem;
 		font-weight: 700;
-		line-height: 1;
+		line-height: 1.2;
+	}
+
+	.search label {
+		justify-content: flex-start;
 	}
 
 	.search input {
 		width: 100%;
-		height: 38px;
+		height: var(--control-height);
 		border: 1px solid var(--line);
 		border-radius: 8px;
 		background: var(--card);
@@ -358,6 +369,7 @@ const shortcuts = settings.shortcuts;
 	.protected-control,
 	.theme-control {
 		display: grid;
+		grid-template-rows: var(--control-label-height) var(--control-height);
 		gap: 8px;
 		justify-items: center;
 	}
@@ -368,7 +380,7 @@ const shortcuts = settings.shortcuts;
 		align-items: center;
 		justify-content: center;
 		width: 52px;
-		height: 36px;
+		height: var(--control-height);
 		border: 1px solid var(--line);
 		border-radius: 999px;
 		background: var(--card);
@@ -390,6 +402,7 @@ const shortcuts = settings.shortcuts;
 
 	.theme-track {
 		position: relative;
+		display: block;
 		width: 34px;
 		height: 18px;
 		border-radius: 999px;
@@ -398,6 +411,7 @@ const shortcuts = settings.shortcuts;
 
 	.theme-thumb {
 		position: absolute;
+		display: block;
 		top: 3px;
 		left: 3px;
 		width: 12px;
@@ -482,6 +496,7 @@ const shortcuts = settings.shortcuts;
 		}
 
 		.toolbar {
+			--control-height: 36px;
 			grid-template-columns: auto minmax(0, 1fr) auto;
 			gap: 10px;
 			margin-bottom: 14px;
@@ -495,14 +510,12 @@ const shortcuts = settings.shortcuts;
 		}
 
 		.search input {
-			height: 36px;
 			padding: 8px 10px;
 		}
 
 		.nav-button,
 		.theme-button {
 			width: 48px;
-			height: 34px;
 		}
 
 		.sections {

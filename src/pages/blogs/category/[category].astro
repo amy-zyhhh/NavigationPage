@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from "astro:transitions";
 import settings from "../../../data/settings.json";
 import { parseBlogPosts, type BlogPost } from "../../../utils/blogPosts";
 
@@ -41,6 +42,7 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<title>我的导航</title>
+		<ClientRouter />
 	</head>
 	<body>
 		<main class="shell">
@@ -51,7 +53,7 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 
 			<section class="blog-list" aria-label={`${category} 分类文章`}>
 				{posts.map((post) => (
-					<article class="post" id={post.slug}>
+					<article class="post" id={post.slug} transition:name={`blog-post-${post.slug}`}>
 						<a class="post-link" href={`${basePath}blogs/${post.slug}/`}>
 							<div class="post-meta">
 								<time datetime={post.date}>{post.date}</time>
@@ -65,18 +67,6 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 		</main>
 
 		<script>
-			const root = document.documentElement;
-			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
-			const defaultTheme = root.dataset.defaultTheme || "system";
-			const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
-			const homeUrl = root.dataset.homeUrl || "/";
-
-			if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
-				window.location.replace(homeUrl);
-			} else {
-				root.classList.remove("locked");
-			}
-
 			function systemTheme() {
 				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 			}
@@ -85,8 +75,34 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 				return theme === "system" ? systemTheme() : theme;
 			}
 
-			const theme = localStorage.getItem(storageKey) || defaultTheme;
-			root.dataset.theme = resolveTheme(theme);
+			function initCurrentBlogPage() {
+				const root = document.documentElement;
+				const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+				const defaultTheme = root.dataset.defaultTheme || "system";
+				const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
+				const homeUrl = root.dataset.homeUrl || "/";
+
+				if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
+					window.location.replace(homeUrl);
+					return;
+				}
+
+				root.classList.remove("locked");
+				root.dataset.theme = resolveTheme(localStorage.getItem(storageKey) || defaultTheme);
+
+				if (window.__blogDetailScrollHandler) {
+					window.removeEventListener("scroll", window.__blogDetailScrollHandler);
+					window.__blogDetailScrollHandler = null;
+				}
+				root.dataset.scrolled = String(window.scrollY > 96);
+			}
+
+			window.__initCurrentBlogPage = initCurrentBlogPage;
+			if (!window.__blogPageAfterSwapBound) {
+				document.addEventListener("astro:after-swap", () => window.__initCurrentBlogPage?.());
+				window.__blogPageAfterSwapBound = true;
+			}
+			initCurrentBlogPage();
 		</script>
 	</body>
 </html>
@@ -131,6 +147,34 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 		box-sizing: border-box;
 	}
 
+	@keyframes blog-page-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes blog-page-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	::view-transition-old(root) {
+		animation: 120ms ease both blog-page-out;
+	}
+
+	::view-transition-new(root) {
+		animation: 180ms ease both blog-page-in;
+	}
+
 	body {
 		margin: 0;
 		min-height: 100vh;
@@ -154,7 +198,7 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 	}
 
 	.shell {
-		width: min(860px, calc(100% - 32px));
+		width: min(720px, calc(100% - 32px));
 		margin: 0 auto;
 		padding: 24px 0 48px;
 	}
@@ -237,7 +281,7 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 
 	@media (max-width: 720px) {
 		.shell {
-			width: min(100% - 24px, 860px);
+			width: min(100% - 24px, 720px);
 			padding-top: 12px;
 		}
 

@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from "astro:transitions";
 import settings from "../../data/settings.json";
 import { parseBlogHeadings, parseBlogPosts, type BlogPost } from "../../utils/blogPosts";
 
@@ -55,6 +56,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<title>我的导航</title>
+		<ClientRouter />
 	</head>
 	<body>
 		<main class="shell">
@@ -73,7 +75,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 						</div>
 					</nav>
 
-					<article class="post" id="top">
+					<article class="post" id="top" transition:name={`blog-post-${post.slug}`}>
 						<div class="post-meta">
 							<time datetime={post.date}>{post.date}</time>
 							<a href={`${basePath}blogs/category/${encodeURIComponent(post.category)}/`}>{post.category}</a>
@@ -106,22 +108,6 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		</main>
 
 		<script>
-			const root = document.documentElement;
-			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
-			const defaultTheme = root.dataset.defaultTheme || "system";
-			const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
-			const homeUrl = root.dataset.homeUrl || "/";
-			const sidebarStorageKey = root.dataset.sidebarStorageKey || "navigation-blog-sidebar-hidden";
-			const sidebarToggle = document.querySelector("#sidebarToggle");
-			const tocLinks = Array.from(document.querySelectorAll(".toc-link"));
-			const headingIds = JSON.parse(root.dataset.headingIds || "[]");
-
-			if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
-				window.location.replace(homeUrl);
-			} else {
-				root.classList.remove("locked");
-			}
-
 			function systemTheme() {
 				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 			}
@@ -130,45 +116,120 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 				return theme === "system" ? systemTheme() : theme;
 			}
 
-			const theme = localStorage.getItem(storageKey) || defaultTheme;
-			root.dataset.theme = resolveTheme(theme);
+			function initCurrentBlogPage() {
+				const root = document.documentElement;
+				const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+				const defaultTheme = root.dataset.defaultTheme || "system";
+				const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
+				const homeUrl = root.dataset.homeUrl || "/";
 
-			document.querySelectorAll(".content h1, .content h2, .content h3, .content h4").forEach((heading, index) => {
-				const id = headingIds[index];
-				if (id) heading.id = id;
-			});
-
-			function setActiveHeading() {
-				let activeId = headingIds[0];
-				for (const id of headingIds) {
-					const heading = document.getElementById(id);
-					if (heading && heading.getBoundingClientRect().top <= 120) {
-						activeId = id;
-					}
+				if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
+					window.location.replace(homeUrl);
+					return;
 				}
 
-				tocLinks.forEach((link) => {
-					link.classList.toggle("active", link.getAttribute("href") === `#${activeId}`);
+				root.classList.remove("locked");
+				root.dataset.theme = resolveTheme(localStorage.getItem(storageKey) || defaultTheme);
+				initBlogListPage();
+				initBlogDetailPage(root);
+			}
+
+			function initBlogListPage() {
+				const searchInput = document.querySelector("#blogSearchInput");
+				const posts = Array.from(document.querySelectorAll("[data-post]"));
+				const dateGroups = Array.from(document.querySelectorAll(".date-group"));
+				const emptyState = document.querySelector("#emptyState");
+				if (!searchInput || !emptyState) return;
+
+				function updatePosts() {
+					const keyword = searchInput.value.trim().toLowerCase();
+					let visibleCount = 0;
+
+					posts.forEach((post) => {
+						const isVisible = !keyword || (post.dataset.search || "").includes(keyword);
+						post.hidden = !isVisible;
+						if (isVisible) visibleCount += 1;
+					});
+
+					dateGroups.forEach((group) => {
+						const hasVisiblePost = Array.from(group.querySelectorAll("[data-post]")).some((post) => !post.hidden);
+						group.hidden = !hasVisiblePost;
+					});
+
+					emptyState.hidden = !keyword || visibleCount > 0;
+				}
+
+				searchInput.oninput = updatePosts;
+				updatePosts();
+			}
+
+			function initBlogDetailPage(root) {
+				if (window.__blogDetailScrollHandler) {
+					window.removeEventListener("scroll", window.__blogDetailScrollHandler);
+					window.__blogDetailScrollHandler = null;
+				}
+
+				const sidebarStorageKey = "navigation-blog-sidebar-hidden";
+				const sidebarToggle = document.querySelector("#sidebarToggle");
+				const tocLinks = Array.from(document.querySelectorAll(".toc-link"));
+				const headingIds = tocLinks
+					.map((link) => link.getAttribute("href") || "")
+					.filter((href) => href.startsWith("#"))
+					.map((href) => href.slice(1));
+				if (!sidebarToggle) {
+					root.dataset.scrolled = String(window.scrollY > 96);
+					return;
+				}
+
+				if (headingIds.length > 0) {
+					document.querySelectorAll(".content h1, .content h2, .content h3, .content h4").forEach((heading, index) => {
+						const id = headingIds[index];
+						if (id) heading.id = id;
+					});
+				}
+
+				function setSidebarHidden(isHidden) {
+					root.dataset.sidebarHidden = String(isHidden);
+					localStorage.setItem(sidebarStorageKey, String(isHidden));
+					sidebarToggle.setAttribute("aria-pressed", String(isHidden));
+				}
+
+				const savedSidebarHidden = localStorage.getItem(sidebarStorageKey);
+				delete root.dataset.sidebarReady;
+				setSidebarHidden(savedSidebarHidden === null ? true : savedSidebarHidden === "true");
+				requestAnimationFrame(() => {
+					root.dataset.sidebarReady = "true";
 				});
-				root.dataset.scrolled = String(window.scrollY > 96);
+				sidebarToggle.onclick = () => {
+					setSidebarHidden(root.dataset.sidebarHidden !== "true");
+				};
+
+				function setActiveHeading() {
+					let activeId = headingIds[0];
+					for (const id of headingIds) {
+						const heading = document.getElementById(id);
+						if (heading && heading.getBoundingClientRect().top <= 120) {
+							activeId = id;
+						}
+					}
+
+					tocLinks.forEach((link) => {
+						link.classList.toggle("active", link.getAttribute("href") === `#${activeId}`);
+					});
+					root.dataset.scrolled = String(window.scrollY > 96);
+				}
+
+				window.__blogDetailScrollHandler = setActiveHeading;
+				window.addEventListener("scroll", setActiveHeading, { passive: true });
+				setActiveHeading();
 			}
 
-			function setSidebarHidden(isHidden) {
-				root.dataset.sidebarHidden = String(isHidden);
-				localStorage.setItem(sidebarStorageKey, String(isHidden));
-				sidebarToggle?.setAttribute("aria-pressed", String(isHidden));
+			window.__initCurrentBlogPage = initCurrentBlogPage;
+			if (!window.__blogPageAfterSwapBound) {
+				document.addEventListener("astro:after-swap", () => window.__initCurrentBlogPage?.());
+				window.__blogPageAfterSwapBound = true;
 			}
-
-			const savedSidebarHidden = localStorage.getItem(sidebarStorageKey);
-			setSidebarHidden(savedSidebarHidden === null ? true : savedSidebarHidden === "true");
-			requestAnimationFrame(() => {
-				root.dataset.sidebarReady = "true";
-			});
-			sidebarToggle?.addEventListener("click", () => {
-				setSidebarHidden(root.dataset.sidebarHidden !== "true");
-			});
-			setActiveHeading();
-			window.addEventListener("scroll", setActiveHeading, { passive: true });
+			initCurrentBlogPage();
 		</script>
 	</body>
 </html>
@@ -176,9 +237,10 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 <style>
 	:root {
 		color-scheme: light;
-		--bg: #f8f7f3;
-		--panel: #fffdf8;
+		--bg: #fbfaf7;
+		--panel: #fffefb;
 		--card: #ffffff;
+		--article: #fffefb;
 		--text: #1d2928;
 		--muted: #64706d;
 		--line: #ddd7cc;
@@ -194,6 +256,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		--bg: #171c1d;
 		--panel: #202629;
 		--card: #22282b;
+		--article: #202629;
 		--text: #edf1ef;
 		--muted: #a9b3b0;
 		--line: #354044;
@@ -207,6 +270,34 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 
 	* {
 		box-sizing: border-box;
+	}
+
+	@keyframes blog-page-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes blog-page-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	::view-transition-old(root) {
+		animation: 120ms ease both blog-page-out;
+	}
+
+	::view-transition-new(root) {
+		animation: 180ms ease both blog-page-in;
 	}
 
 	body {
@@ -230,12 +321,12 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-		margin-bottom: 14px;
+		margin-bottom: 20px;
 		padding: 8px 10px;
 		border: 1px solid color-mix(in srgb, var(--line), transparent 35%);
 		border-radius: 8px;
-		background: color-mix(in srgb, var(--panel), transparent 3%);
-		box-shadow: 0 8px 20px rgba(29, 41, 40, 0.05);
+		background: color-mix(in srgb, var(--panel), transparent 1%);
+		box-shadow: 0 4px 14px rgba(29, 41, 40, 0.03);
 		backdrop-filter: blur(12px);
 	}
 
@@ -376,7 +467,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		gap: 12px;
 		width: 238px;
 		border: 0;
-		border-left: 2px solid color-mix(in srgb, var(--accent), transparent 58%);
+		border-left: 1px solid color-mix(in srgb, var(--accent), transparent 74%);
 		border-radius: 0;
 		background: color-mix(in srgb, var(--panel), transparent 36%);
 		box-shadow: none;
@@ -427,13 +518,15 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 
 	.toc-link::before {
 		position: absolute;
-		top: 8px;
-		bottom: 8px;
+		top: 50%;
+		bottom: auto;
 		left: -17px;
 		width: 2px;
+		height: 14px;
 		border-radius: 999px;
 		background: transparent;
 		content: "";
+		transform: translateY(-50%);
 		transition: background 0.16s ease;
 	}
 
@@ -469,9 +562,9 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 	.post {
 		border: 0;
 		border-radius: 8px;
-		background: color-mix(in srgb, var(--card), transparent 3%);
-		box-shadow: 0 8px 24px rgba(29, 41, 40, 0.045);
-		padding: 26px 28px 34px;
+		background: var(--article);
+		box-shadow: 0 6px 20px rgba(29, 41, 40, 0.035);
+		padding: 30px 34px 40px;
 	}
 
 	.post-meta {
@@ -503,7 +596,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 	p,
 	li {
 		color: var(--text);
-		line-height: 1.82;
+		line-height: 1.9;
 	}
 
 	p {
@@ -543,7 +636,8 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 
 	.content :global(h1) {
 		margin-top: 30px;
-		font-size: 1.9rem;
+		font-size: 1.74rem;
+		font-weight: 800;
 	}
 
 	.content :global(img) {
@@ -588,7 +682,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		}
 
 		.post {
-			padding: 17px;
+			padding: 20px;
 		}
 
 		h1 {

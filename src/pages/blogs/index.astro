@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from "astro:transitions";
 import settings from "../../data/settings.json";
 import { parseBlogPosts } from "../../utils/blogPosts";
 import { blogPostSearchText } from "../../utils/searchItems";
@@ -38,6 +39,7 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<title>我的导航</title>
+		<ClientRouter />
 	</head>
 	<body>
 		<main class="shell">
@@ -67,6 +69,7 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 								id={post.slug}
 								data-post
 								data-search={blogPostSearchText(post)}
+								transition:name={`blog-post-${post.slug}`}
 							>
 								<a class="post-link" href={`${basePath}blogs/${post.slug}/`}>
 									<div class="post-meta">
@@ -84,22 +87,6 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 		</main>
 
 		<script>
-			const root = document.documentElement;
-			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
-			const defaultTheme = root.dataset.defaultTheme || "system";
-			const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
-			const homeUrl = root.dataset.homeUrl || "/";
-			const searchInput = document.querySelector("#blogSearchInput");
-			const posts = Array.from(document.querySelectorAll("[data-post]"));
-			const dateGroups = Array.from(document.querySelectorAll(".date-group"));
-			const emptyState = document.querySelector("#emptyState");
-
-			if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
-				window.location.replace(homeUrl);
-			} else {
-				root.classList.remove("locked");
-			}
-
 			function systemTheme() {
 				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 			}
@@ -108,29 +95,120 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 				return theme === "system" ? systemTheme() : theme;
 			}
 
-			const theme = localStorage.getItem(storageKey) || defaultTheme;
-			root.dataset.theme = resolveTheme(theme);
+			function initCurrentBlogPage() {
+				const root = document.documentElement;
+				const storageKey = root.dataset.themeStorageKey || "navigation-theme";
+				const defaultTheme = root.dataset.defaultTheme || "system";
+				const unlockedStorageKey = root.dataset.unlockedStorageKey || "navigation-protected-unlocked";
+				const homeUrl = root.dataset.homeUrl || "/";
 
-			function updatePosts() {
-				if (!searchInput || !emptyState) return;
-				const keyword = searchInput.value.trim().toLowerCase();
-				let visibleCount = 0;
+				if (sessionStorage.getItem(unlockedStorageKey) !== "true") {
+					window.location.replace(homeUrl);
+					return;
+				}
 
-				posts.forEach((post) => {
-					const isVisible = !keyword || (post.dataset.search || "").includes(keyword);
-					post.hidden = !isVisible;
-					if (isVisible) visibleCount += 1;
-				});
-
-				dateGroups.forEach((group) => {
-					const hasVisiblePost = Array.from(group.querySelectorAll("[data-post]")).some((post) => !post.hidden);
-					group.hidden = !hasVisiblePost;
-				});
-
-				emptyState.hidden = !keyword || visibleCount > 0;
+				root.classList.remove("locked");
+				root.dataset.theme = resolveTheme(localStorage.getItem(storageKey) || defaultTheme);
+				initBlogListPage();
+				initBlogDetailPage(root);
 			}
 
-			searchInput?.addEventListener("input", updatePosts);
+			function initBlogListPage() {
+				const searchInput = document.querySelector("#blogSearchInput");
+				const posts = Array.from(document.querySelectorAll("[data-post]"));
+				const dateGroups = Array.from(document.querySelectorAll(".date-group"));
+				const emptyState = document.querySelector("#emptyState");
+				if (!searchInput || !emptyState) return;
+
+				function updatePosts() {
+					const keyword = searchInput.value.trim().toLowerCase();
+					let visibleCount = 0;
+
+					posts.forEach((post) => {
+						const isVisible = !keyword || (post.dataset.search || "").includes(keyword);
+						post.hidden = !isVisible;
+						if (isVisible) visibleCount += 1;
+					});
+
+					dateGroups.forEach((group) => {
+						const hasVisiblePost = Array.from(group.querySelectorAll("[data-post]")).some((post) => !post.hidden);
+						group.hidden = !hasVisiblePost;
+					});
+
+					emptyState.hidden = !keyword || visibleCount > 0;
+				}
+
+				searchInput.oninput = updatePosts;
+				updatePosts();
+			}
+
+			function initBlogDetailPage(root) {
+				if (window.__blogDetailScrollHandler) {
+					window.removeEventListener("scroll", window.__blogDetailScrollHandler);
+					window.__blogDetailScrollHandler = null;
+				}
+
+				const sidebarToggle = document.querySelector("#sidebarToggle");
+				const tocLinks = Array.from(document.querySelectorAll(".toc-link"));
+				const headingIds = tocLinks
+					.map((link) => link.getAttribute("href") || "")
+					.filter((href) => href.startsWith("#"))
+					.map((href) => href.slice(1));
+				if (!sidebarToggle) {
+					root.dataset.scrolled = String(window.scrollY > 96);
+					return;
+				}
+
+				if (headingIds.length > 0) {
+					document.querySelectorAll(".content h1, .content h2, .content h3, .content h4").forEach((heading, index) => {
+						const id = headingIds[index];
+						if (id) heading.id = id;
+					});
+				}
+
+				const sidebarStorageKey = "navigation-blog-sidebar-hidden";
+				function setSidebarHidden(isHidden) {
+					root.dataset.sidebarHidden = String(isHidden);
+					localStorage.setItem(sidebarStorageKey, String(isHidden));
+					sidebarToggle.setAttribute("aria-pressed", String(isHidden));
+				}
+
+				const savedSidebarHidden = localStorage.getItem(sidebarStorageKey);
+				delete root.dataset.sidebarReady;
+				setSidebarHidden(savedSidebarHidden === null ? true : savedSidebarHidden === "true");
+				requestAnimationFrame(() => {
+					root.dataset.sidebarReady = "true";
+				});
+				sidebarToggle.onclick = () => {
+					setSidebarHidden(root.dataset.sidebarHidden !== "true");
+				};
+
+				function setActiveHeading() {
+					let activeId = headingIds[0];
+					for (const id of headingIds) {
+						const heading = document.getElementById(id);
+						if (heading && heading.getBoundingClientRect().top <= 120) {
+							activeId = id;
+						}
+					}
+
+					tocLinks.forEach((link) => {
+						link.classList.toggle("active", link.getAttribute("href") === `#${activeId}`);
+					});
+					root.dataset.scrolled = String(window.scrollY > 96);
+				}
+
+				window.__blogDetailScrollHandler = setActiveHeading;
+				window.addEventListener("scroll", setActiveHeading, { passive: true });
+				setActiveHeading();
+			}
+
+			window.__initCurrentBlogPage = initCurrentBlogPage;
+			if (!window.__blogPageAfterSwapBound) {
+				document.addEventListener("astro:after-swap", () => window.__initCurrentBlogPage?.());
+				window.__blogPageAfterSwapBound = true;
+			}
+			initCurrentBlogPage();
 		</script>
 	</body>
 </html>
@@ -175,6 +253,34 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 		box-sizing: border-box;
 	}
 
+	@keyframes blog-page-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes blog-page-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	::view-transition-old(root) {
+		animation: 120ms ease both blog-page-out;
+	}
+
+	::view-transition-new(root) {
+		animation: 180ms ease both blog-page-in;
+	}
+
 	body {
 		margin: 0;
 		min-height: 100vh;
@@ -198,7 +304,7 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 	}
 
 	.shell {
-		width: min(860px, calc(100% - 32px));
+		width: min(720px, calc(100% - 32px));
 		margin: 0 auto;
 		padding: 24px 0 48px;
 	}
@@ -404,7 +510,7 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 
 	@media (max-width: 720px) {
 		.shell {
-			width: min(100% - 24px, 860px);
+			width: min(100% - 24px, 720px);
 			padding-top: 12px;
 		}
 
