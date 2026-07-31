@@ -1,11 +1,12 @@
 - name: InfoRSS
-  url: https://amy-zyhhh.github.io/InfoRSS/
+  url: /pages/inforss/
   category: 其他
   description: 信息订阅与 RSS 相关页面。
   tag: RSS
   order: 90
   pinned: true
   icon: amy-zyhhh.github.io
+  target: _self
 - name: Paper
   url: https://amy-zyhhh.github.io/paper/
   category: 其他
