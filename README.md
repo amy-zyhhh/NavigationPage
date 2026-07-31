@@ -16,6 +16,7 @@ https://amy-zyhhh.github.io/NavigationPage/
 - 支持本地搜索
 - 输入 `/关键词` 后按回车可用 Bing 搜索
 - 支持深色 / 浅色主题切换
+- 支持简单密码入口和独立加密导航页
 - 支持电脑和手机浏览
 - 链接数据使用 YAML 维护
 
@@ -47,7 +48,7 @@ npm.cmd run build
 
 ## 修改网址
 
-网址数据在：
+普通网址数据在：
 
 ```text
 src/data/links.yaml
@@ -76,6 +77,54 @@ src/data/links.yaml
 - `order`：排序数字，数字越小越靠前
 - `pinned`：是否置顶，`true` 表示显示在置顶区域；置顶后仍会保留在原分类中
 - `icon`：favicon 使用的域名；加载失败时会显示同色圆点
+
+## 加密导航
+
+首页“其他”分组里的“加密导航”卡片会提示输入密码。密码正确后会跳转到独立的加密导航页：
+
+```text
+https://amy-zyhhh.github.io/NavigationPage/protected/
+```
+
+错误 3 次后会临时锁定 5 分钟。加密导航使用浏览器前端校验，适合防止随手打开，不适合保存真正敏感内容。
+
+加密网址数据在：
+
+```text
+src/data/protected-links.yaml
+```
+
+格式和普通网址一致：
+
+```yaml
+- name: 示例加密入口
+  url: https://example.com
+  category: 其他
+  description: 用于搜索匹配的简短说明。
+  tag: 示例
+  order: 10
+  icon: example.com
+```
+
+当前默认密码是：
+
+```text
+12345ssdlh
+```
+
+建议改成自己的密码。修改方式是把新密码转换成 SHA-256，然后替换：
+
+```text
+src/data/settings.json
+```
+
+其中 `protectedAccess.passwordHash` 是密码的 SHA-256 值，`maxAttempts` 是允许错误次数，`lockMinutes` 是锁定分钟数。
+
+在 PowerShell 中可以这样生成新密码的 SHA-256：
+
+```powershell
+node -e "console.log(require('crypto').createHash('sha256').update('你的密码').digest('hex'))"
+```
 
 ## 搜索与快捷键
 

@@ -12,5 +12,13 @@
     "prefix": "/",
     "url": "https://www.bing.com/search?q={query}",
     "target": "_blank"
+  },
+  "protectedAccess": {
+    "passwordHash": "d9dec0428ad6901b1e15bb50a1c258c5c09bf07998dfe544fa382dc20e7161ba",
+    "maxAttempts": 3,
+    "lockMinutes": 5,
+    "storageKey": "navigation-protected-unlocked",
+    "attemptsKey": "navigation-protected-attempts",
+    "lockUntilKey": "navigation-protected-lock-until"
   }
 }

@@ -1,0 +1,21 @@
+- name: 星辰大道
+  url: https://sudugu.org/1863
+  category: 其他
+  description: 星辰大道页面入口。
+  tag: 小说
+  order: 10
+  icon: sudugu.org
+- name: 无敌天命
+  url: https://sudugu.org/1667
+  category: 其他
+  description: 无敌天命页面入口。
+  tag: 小说
+  order: 20
+  icon: sudugu.org
+- name: MoonTVPlus
+  url: https://moontv.test260729.cloud-ip.cc/
+  category: 其他
+  description: MoonTVPlus 页面入口。
+  tag: 视频
+  order: 30
+  icon: moontv.test260729.cloud-ip.cc

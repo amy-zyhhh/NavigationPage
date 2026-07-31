@@ -70,10 +70,3 @@
   tag: 数据库
   order: 70
   icon: webofscience.com
-- name: MoonTVPlus
-  url: https://moontv.test260729.cloud-ip.cc/
-  category: 其他
-  description: MoonTVPlus 页面入口。
-  tag: 视频
-  order: 110
-  icon: moontv.test260729.cloud-ip.cc

@@ -5,6 +5,7 @@
 ## 文件说明
 
 - `links.yaml`：网址卡片数据
+- `protected-links.yaml`：加密导航页的网址卡片数据
 - `settings.json`：主题、快捷键和 Bing 搜索配置
 
 ## 添加网址
@@ -48,3 +49,11 @@
 - 输入 `/关键词` 后按回车，会用 Bing 搜索这个关键词
 
 如果要更换搜索引擎，修改 `settings.json` 里的 `webSearch.url`。
+
+## 加密导航
+
+加密导航的数据维护在 `protected-links.yaml`，字段格式和 `links.yaml` 一致。
+
+首页点击“其他”分组里的“加密导航”卡片后会提示输入密码。密码正确后进入 `/protected/` 页面；错误次数达到 `settings.json` 里的 `protectedAccess.maxAttempts` 后，会锁定 `protectedAccess.lockMinutes` 分钟。
+
+默认密码是 `12345ssdlh`。如果要修改密码，先计算新密码的 SHA-256 值，然后替换 `settings.json` 里的 `protectedAccess.passwordHash`。

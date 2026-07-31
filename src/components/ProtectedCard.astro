@@ -1,0 +1,82 @@
+---
+interface Props {
+  url: string;
+}
+
+const { url } = Astro.props;
+const accent = "rgba(153, 204, 128, 0.92)";
+---
+
+<article class="protected-card" style={`--card-accent: ${accent}`} data-protected-card data-search="其他 加密导航 私密 保护">
+  <a class="protected-link" href={url} id="protectedButton" aria-label="打开加密导航" title="其他">
+    <span class="fallback-icon" aria-hidden="true"></span>
+    <h3 class="protected-title">其他</h3>
+  </a>
+</article>
+
+<style>
+  .protected-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    transition:
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .protected-card::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--card-accent);
+    content: "";
+  }
+
+  .protected-card:hover {
+    border-color: color-mix(in srgb, var(--card-accent), var(--line) 22%);
+    transform: translateY(-1px);
+  }
+
+  .protected-card[hidden] {
+    display: none;
+  }
+
+  .protected-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    min-height: 44px;
+    color: inherit;
+    padding: 8px 14px 8px 15px;
+    text-decoration: none;
+  }
+
+  .fallback-icon {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--card-accent);
+  }
+
+  .protected-title {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 1.05rem;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 720px) {
+    .protected-link {
+      min-height: 42px;
+      padding: 8px 12px 8px 14px;
+    }
+  }
+</style>
