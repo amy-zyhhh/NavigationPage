@@ -50,6 +50,13 @@
   tag: 代码
   order: 40
   icon: github.com
+- name: 临时邮箱
+  url: https://beeinbox.com/zh-CN
+  category: 常用工具
+  description: 临时邮箱服务入口。
+  tag: 邮箱
+  order: 50
+  icon: beeinbox.com
 - name: 谷歌学术
   url: https://scholar.google.com
   category: 学术资源
@@ -71,3 +78,10 @@
   tag: 数据库
   order: 70
   icon: webofscience.com
+- name: 新锐分区
+  url: https://www.xr-scholar.com/Guide
+  category: 学术资源
+  description: 新锐期刊分区指南入口。
+  tag: 分区
+  order: 80
+  icon: xr-scholar.com
