@@ -1,14 +1,19 @@
 ---
-import indexRaw from "../../../InfoRSS/index.json?raw";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import settings from "../../data/settings.json";
 import { parseInfoRssIndex, type InfoRssPost } from "../../utils/infoRssPosts";
 
 export function getStaticPaths() {
+	const indexPath = join(process.cwd(), "InfoRSS", "index.json");
+	if (!existsSync(indexPath)) return [];
+
 	const htmlModules = import.meta.glob("../../../InfoRSS/html/**/*.html", {
 		query: "?raw",
 		import: "default",
 		eager: true,
 	});
+	const indexRaw = readFileSync(indexPath, "utf-8");
 	const posts = parseInfoRssIndex(indexRaw);
 
 	return posts.map((post) => {

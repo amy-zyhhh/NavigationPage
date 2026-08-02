@@ -1,18 +1,46 @@
 ---
-import indexRaw from "../../../InfoRSS/index.json?raw";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import settings from "../../data/settings.json";
-import { infoRssPostSearchText, infoRssPreviewText, parseInfoRssIndex } from "../../utils/infoRssPosts";
+import {
+	infoRssPostSearchText,
+	infoRssPreviewText,
+	infoRssTitleSummarySearchText,
+	parseInfoRssPayload,
+} from "../../utils/infoRssPosts";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
 	? import.meta.env.BASE_URL
 	: `${import.meta.env.BASE_URL}/`;
 
-const posts = parseInfoRssIndex(indexRaw);
-const categoryFilters = ["全部", ...Array.from(new Set(posts.map((post) => post.category)))];
+const indexPath = join(process.cwd(), "InfoRSS", "index.json");
+const indexRaw = existsSync(indexPath)
+	? readFileSync(indexPath, "utf-8")
+	: JSON.stringify({
+			generatedAt: "",
+			lastScrapeAt: "",
+			total: 0,
+			errorCount: 0,
+			sources: [],
+			tags: [],
+			errors: [],
+			posts: [],
+		});
+const payload = parseInfoRssPayload(indexRaw);
+const posts = payload.posts;
+const sourceFilters = payload.sources;
+const categoryFilters = ["全部", ...payload.tags];
 const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date) => ({
 	date,
 	posts: posts.filter((post) => post.date === date),
 }));
+
+function formatDateTime(value: string) {
+	if (!value) return "暂无";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+	return date.toLocaleString("zh-CN", { hour12: false });
+}
 ---
 
 <html
@@ -35,12 +63,43 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 					<a href={basePath}>返回</a>
 					<form class="notice-search" role="search">
 						<label class="sr-only" for="noticeSearchInput">搜索</label>
-						<input id="noticeSearchInput" type="search" placeholder="全文搜索通知" autocomplete="off" />
+						<input id="noticeSearchInput" type="search" placeholder="搜索通知" autocomplete="off" />
 					</form>
+					<select id="searchScope" aria-label="搜索范围">
+						<option value="all">全部内容</option>
+						<option value="titleSummary">标题与摘要</option>
+					</select>
+					<select id="sourceFilter" aria-label="来源筛选">
+						<option value="all">全部来源</option>
+						{sourceFilters.map((source) => (
+							<option value={source.id}>{source.name}</option>
+						))}
+					</select>
+					<button class="clear-button" type="button" id="clearFilters">清空</button>
+					<button
+						class="category-toggle"
+						type="button"
+						id="categoryToggle"
+						aria-expanded="false"
+						aria-controls="categoryFilter"
+					>
+						分类
+					</button>
 					<span>InfoRSS</span>
 				</div>
 
-				<div class="category-filter" aria-label="通知分类筛选">
+				<div class="custom-time" id="customTime">
+					<label>
+						开始
+						<input id="dateFrom" type="date" />
+					</label>
+					<label>
+						结束
+						<input id="dateTo" type="date" />
+					</label>
+				</div>
+
+				<div class="category-filter" id="categoryFilter" aria-label="通知分类筛选" hidden style="display: none;">
 					{categoryFilters.map((category, index) => (
 						<button
 							type="button"
@@ -54,28 +113,73 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 				</div>
 			</nav>
 
+			<section class="status-row" aria-label="InfoRSS 状态">
+				<span>最近更新：{formatDateTime(payload.lastScrapeAt || payload.generatedAt)}</span>
+				<span>收录通知：{payload.total}</span>
+				<span>抓取错误：{payload.errorCount}</span>
+			</section>
+
+			{payload.errors.length > 0 && (
+				<details class="error-panel">
+					<summary>抓取错误（{payload.errors.length}）</summary>
+					<div class="error-list">
+						{payload.errors.map((error) => (
+							<article class="error-item">
+								<strong>{error.title}</strong>
+								<p>
+									{error.sourceName ? `${error.sourceName} · ` : ""}
+									{error.stage}：{error.message}
+								</p>
+								{error.url && (
+									<a href={error.url} target="_blank" rel="noopener noreferrer">打开原文</a>
+								)}
+							</article>
+						))}
+					</div>
+				</details>
+			)}
+
 			<section class="notice-list" aria-label="按日期排列的通知">
 				{dateGroups.map((group) => (
 					<div class="date-group">
 						<div class="date-divider">
 							<time datetime={group.date}>{group.date}</time>
 						</div>
-						{group.posts.map((post) => (
-							<article class="notice" data-post data-category={post.category} data-search={infoRssPostSearchText(post)}>
-								<a class="notice-link" href={`${basePath}inforss/${post.slug}/`}>
-									<div class="notice-meta">
-										<span>{post.category}</span>
-										{post.department && <span>{post.department}</span>}
-									</div>
-									<h1>{post.title}</h1>
-									<p>{infoRssPreviewText(post)}</p>
-								</a>
-							</article>
-						))}
+						{group.posts.map((post) => {
+							const preview = infoRssPreviewText(post);
+							return (
+								<article
+									class="notice"
+									data-post
+									data-date={post.date}
+									data-category={post.category}
+									data-department={post.department}
+									data-source-id={post.sourceId || "info_all"}
+									data-source-name={post.sourceName || ""}
+									data-full-search={infoRssPostSearchText(post)}
+									data-title-summary-search={infoRssTitleSummarySearchText(post)}
+									data-full-text={`${post.title} ${post.date} ${post.category} ${post.department} ${post.sourceName || ""} ${post.searchText}`}
+									data-title-summary-text={`${post.title} ${post.summary} ${post.preview} ${post.titleSummaryText || ""}`}
+									data-title-text={post.title}
+									data-preview={preview}
+								>
+									<a class="notice-link" href={`${basePath}inforss/${post.slug}/`}>
+										<div class="notice-meta">
+											<span>{post.category}</span>
+											{post.department && <span>{post.department}</span>}
+											{sourceFilters.length > 1 && post.sourceName && <span>{post.sourceName}</span>}
+										</div>
+										<h1 data-title>{post.title}</h1>
+										<p data-preview-text>{preview}</p>
+									</a>
+								</article>
+							);
+						})}
 					</div>
 				))}
 			</section>
 			<p class="empty" id="emptyState" hidden>没有找到匹配的通知。</p>
+			<nav class="pagination" id="pagination" aria-label="通知分页"></nav>
 		</main>
 
 		<script>
@@ -83,11 +187,21 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 			const storageKey = root.dataset.themeStorageKey || "navigation-theme";
 			const defaultTheme = root.dataset.defaultTheme || "system";
 			const searchInput = document.querySelector("#noticeSearchInput");
+			const searchScope = document.querySelector("#searchScope");
+			const sourceFilter = document.querySelector("#sourceFilter");
+			const dateFrom = document.querySelector("#dateFrom");
+			const dateTo = document.querySelector("#dateTo");
+			const clearFilters = document.querySelector("#clearFilters");
+			const categoryToggle = document.querySelector("#categoryToggle");
+			const categoryFilter = document.querySelector("#categoryFilter");
+			const pagination = document.querySelector("#pagination");
 			const posts = Array.from(document.querySelectorAll("[data-post]"));
 			const dateGroups = Array.from(document.querySelectorAll(".date-group"));
 			const emptyState = document.querySelector("#emptyState");
 			const categoryButtons = Array.from(document.querySelectorAll("[data-category-filter]"));
+			const pageSize = 30;
 			let selectedCategory = "全部";
+			let currentPage = 1;
 
 			function systemTheme() {
 				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -103,18 +217,97 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 				return value.trim().toLowerCase();
 			}
 
+			function parsePostDate(value) {
+				if (!value || value.length !== 8) return null;
+				return new Date(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00`);
+			}
+
+			function dateMatches(postDateText) {
+				const hasStart = Boolean(dateFrom?.value);
+				const hasEnd = Boolean(dateTo?.value);
+				if (!hasStart && !hasEnd) return true;
+				const postDate = parsePostDate(postDateText);
+				if (!postDate) return true;
+				const start = hasStart ? new Date(`${dateFrom.value}T00:00:00`) : null;
+				const end = hasEnd ? new Date(`${dateTo.value}T23:59:59`) : null;
+				return (!start || postDate >= start) && (!end || postDate <= end);
+			}
+
+			function escapeHtml(value) {
+				return value.replace(/[&<>"']/g, (char) => ({
+					"&": "&amp;",
+					"<": "&lt;",
+					">": "&gt;",
+					'"': "&quot;",
+					"'": "&#039;",
+				})[char]);
+			}
+
+			function highlight(value, keywords) {
+				let output = escapeHtml(value);
+				keywords.forEach((keyword) => {
+					const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+					output = output.replace(new RegExp(`(${escapedKeyword})`, "gi"), "<mark>$1</mark>");
+				});
+				return output;
+			}
+
+			function snippet(value, keywords, fallback) {
+				const source = (value || fallback || "").replace(/\s+/g, " ").trim();
+				if (!keywords.length) return fallback || source;
+				const lower = source.toLowerCase();
+				const index = keywords.map((keyword) => lower.indexOf(keyword)).find((position) => position >= 0);
+				if (index === undefined) return fallback || source.slice(0, 150);
+				const start = Math.max(0, index - 55);
+				const end = Math.min(source.length, index + 115);
+				return `${start > 0 ? "..." : ""}${source.slice(start, end)}${end < source.length ? "..." : ""}`;
+			}
+
+			function updatePostText(post, keywords, displayText) {
+				const title = post.querySelector("[data-title]");
+				const preview = post.querySelector("[data-preview-text]");
+				const titleText = post.dataset.titleText || "";
+				const fallbackPreview = post.dataset.preview || "";
+				const previewText = snippet(displayText, keywords, fallbackPreview);
+				if (title) title.innerHTML = keywords.length ? highlight(titleText, keywords) : escapeHtml(titleText);
+				if (preview) {
+					preview.innerHTML = keywords.length
+						? highlight(previewText, keywords)
+						: escapeHtml(fallbackPreview);
+				}
+			}
+
 			function updatePosts() {
 				if (!searchInput || !emptyState) return;
 				const keywords = normalizeSearchText(searchInput.value).split(/\s+/).filter(Boolean);
-				let visibleCount = 0;
+				const scope = searchScope?.value || "all";
+				const selectedSource = sourceFilter?.value || "all";
+				const matchedPosts = [];
 
 				posts.forEach((post) => {
-					const searchText = post.dataset.search || "";
-					const categoryMatches = selectedCategory === "全部" || post.dataset.category === selectedCategory;
+					const searchText = scope === "titleSummary"
+						? post.dataset.titleSummarySearch || ""
+						: post.dataset.fullSearch || "";
+					const displayText = scope === "titleSummary"
+						? post.dataset.titleSummaryText || ""
+						: post.dataset.fullText || "";
+					const sourceMatches = selectedSource === "all" || post.dataset.sourceId === selectedSource;
+					const categoryMatches = selectedCategory === "全部"
+						|| post.dataset.category === selectedCategory;
 					const searchMatches = keywords.length === 0 || keywords.every((keyword) => searchText.includes(keyword));
-					const isVisible = categoryMatches && searchMatches;
-					post.hidden = !isVisible;
-					if (isVisible) visibleCount += 1;
+					const timeMatches = dateMatches(post.dataset.date || "");
+					const matched = sourceMatches && categoryMatches && searchMatches && timeMatches;
+					if (matched) matchedPosts.push(post);
+					post.hidden = true;
+					updatePostText(post, keywords, displayText);
+				});
+
+				const totalPages = Math.max(1, Math.ceil(matchedPosts.length / pageSize));
+				currentPage = Math.min(currentPage, totalPages);
+				const startIndex = (currentPage - 1) * pageSize;
+				const pagePosts = matchedPosts.slice(startIndex, startIndex + pageSize);
+				pagePosts.forEach((post) => {
+					post.hidden = false;
 				});
 
 				dateGroups.forEach((group) => {
@@ -122,12 +315,76 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 					group.hidden = !hasVisiblePost;
 				});
 
-				emptyState.hidden = visibleCount > 0;
+				emptyState.hidden = matchedPosts.length > 0;
+				renderPagination(totalPages, matchedPosts.length);
+			}
+
+			function renderPagination(totalPages, totalItems) {
+				if (!pagination) return;
+				pagination.innerHTML = "";
+				pagination.hidden = totalItems === 0 || totalPages <= 1;
+				if (pagination.hidden) return;
+
+				const pageStatus = document.createElement("span");
+				pageStatus.className = "pagination-status";
+				pageStatus.textContent = `第 ${currentPage} / ${totalPages} 页`;
+				pagination.append(pageStatus);
+
+				pagination.append(createPageButton("上一页", currentPage - 1, currentPage === 1));
+
+				pageWindow(totalPages, currentPage).forEach((page) => {
+					if (page === "...") {
+						const gap = document.createElement("span");
+						gap.className = "pagination-gap";
+						gap.textContent = "...";
+						pagination.append(gap);
+						return;
+					}
+					const button = createPageButton(String(page), page, false);
+					button.setAttribute("aria-current", page === currentPage ? "page" : "false");
+					pagination.append(button);
+				});
+
+				pagination.append(createPageButton("下一页", currentPage + 1, currentPage === totalPages));
+			}
+
+			function createPageButton(label, page, disabled) {
+				const button = document.createElement("button");
+				button.type = "button";
+				button.className = "page-button";
+				button.textContent = label;
+				button.disabled = disabled;
+				button.addEventListener("click", () => {
+					currentPage = page;
+					updatePosts();
+					document.querySelector(".notice-list")?.scrollIntoView({ block: "start" });
+				});
+				return button;
+			}
+
+			function pageWindow(totalPages, activePage) {
+				if (totalPages <= 7) {
+					return Array.from({ length: totalPages }, (_, index) => index + 1);
+				}
+				const pages = [1];
+				const start = Math.max(2, activePage - 1);
+				const end = Math.min(totalPages - 1, activePage + 1);
+				if (start > 2) pages.push("...");
+				for (let page = start; page <= end; page += 1) pages.push(page);
+				if (end < totalPages - 1) pages.push("...");
+				pages.push(totalPages);
+				return pages;
+			}
+
+			function rerunFromFirstPage() {
+				currentPage = 1;
+				updatePosts();
 			}
 
 			categoryButtons.forEach((button) => {
 				button.addEventListener("click", () => {
 					selectedCategory = button.dataset.categoryFilter || "全部";
+					currentPage = 1;
 					categoryButtons.forEach((item) => {
 						item.setAttribute("aria-pressed", String(item === button));
 					});
@@ -135,7 +392,37 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 				});
 			});
 
-			searchInput?.addEventListener("input", updatePosts);
+			searchInput?.addEventListener("input", rerunFromFirstPage);
+			searchScope?.addEventListener("change", rerunFromFirstPage);
+			sourceFilter?.addEventListener("change", rerunFromFirstPage);
+			dateFrom?.addEventListener("change", rerunFromFirstPage);
+			dateTo?.addEventListener("change", rerunFromFirstPage);
+			categoryToggle?.addEventListener("click", () => {
+				const isExpanded = categoryToggle.getAttribute("aria-expanded") === "true";
+				categoryToggle.setAttribute("aria-expanded", String(!isExpanded));
+				if (categoryFilter) {
+					categoryFilter.hidden = isExpanded;
+					categoryFilter.style.display = isExpanded ? "none" : "";
+				}
+			});
+			clearFilters?.addEventListener("click", () => {
+				searchInput.value = "";
+				searchScope.value = "all";
+				sourceFilter.value = "all";
+				dateFrom.value = "";
+				dateTo.value = "";
+				selectedCategory = "全部";
+				categoryToggle?.setAttribute("aria-expanded", "false");
+				if (categoryFilter) {
+					categoryFilter.hidden = true;
+					categoryFilter.style.display = "none";
+				}
+				currentPage = 1;
+				categoryButtons.forEach((item, index) => {
+					item.setAttribute("aria-pressed", String(index === 0));
+				});
+				updatePosts();
+			});
 			updatePosts();
 		</script>
 	</body>
@@ -154,6 +441,7 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		--line: #ddd7cc;
 		--accent: #267f86;
 		--accent-strong: #155e63;
+		--danger: #a64034;
 		font-family:
 			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
 			"Microsoft YaHei", "PingFang SC", sans-serif;
@@ -171,6 +459,7 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		--line: #354044;
 		--accent: #6db5b8;
 		--accent-strong: #9ed5d7;
+		--danger: #ee8b80;
 	}
 
 	* {
@@ -211,7 +500,7 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		z-index: 2;
 		display: grid;
 		gap: 10px;
-		margin-bottom: 18px;
+		margin-bottom: 14px;
 		padding: 12px;
 		border: 1px solid var(--line);
 		border-radius: 8px;
@@ -219,11 +508,14 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		backdrop-filter: blur(12px);
 	}
 
-	.topbar-main {
+	.topbar-main,
+	.custom-time,
+	.category-filter,
+	.status-row {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		justify-content: flex-start;
-		gap: 12px;
+		gap: 8px;
 	}
 
 	.topbar-main a {
@@ -252,26 +544,51 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		white-space: nowrap;
 	}
 
-	.notice-search input {
-		width: 100%;
+	input,
+	select,
+	.clear-button,
+	.category-toggle,
+	.page-button {
 		height: 34px;
 		border: 1px solid var(--line);
 		border-radius: 8px;
 		background: var(--card);
 		color: var(--text);
-		padding: 8px 10px;
+		font: inherit;
+		padding: 7px 10px;
+	}
+
+	.notice-search input {
+		width: 100%;
 		outline: none;
 	}
 
-	.notice-search input:focus {
+	input:focus,
+	select:focus {
 		border-color: var(--accent);
 		box-shadow: 0 0 0 4px rgba(38, 127, 134, 0.14);
+		outline: none;
+	}
+
+	.clear-button,
+	.category-toggle,
+	.page-button,
+	.category-filter-button {
+		cursor: pointer;
+		font-weight: 800;
+	}
+
+	:global(.page-button:disabled) {
+		cursor: not-allowed;
+		opacity: 0.45;
+	}
+
+	.custom-time {
+		color: var(--muted);
+		font-size: 0.86rem;
 	}
 
 	.category-filter {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
 		margin: 0;
 	}
 
@@ -283,16 +600,50 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		border-radius: 999px;
 		background: var(--card);
 		color: var(--accent-strong);
-		cursor: pointer;
 		font: inherit;
 		font-size: 0.84rem;
-		font-weight: 800;
 		padding: 5px 10px;
 	}
 
 	.category-filter-button[aria-pressed="true"] {
 		border-color: var(--accent);
 		background: color-mix(in srgb, var(--accent), transparent 88%);
+	}
+
+	.status-row {
+		margin-bottom: 12px;
+		color: var(--muted);
+		font-size: 0.82rem;
+		font-weight: 700;
+	}
+
+	.error-panel {
+		margin-bottom: 16px;
+		border: 1px solid color-mix(in srgb, var(--danger), transparent 45%);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--card), var(--danger) 4%);
+		padding: 12px 14px;
+	}
+
+	.error-panel summary {
+		color: var(--danger);
+		cursor: pointer;
+		font-weight: 800;
+	}
+
+	.error-list {
+		display: grid;
+		gap: 10px;
+		margin-top: 12px;
+	}
+
+	.error-item p {
+		margin-top: 4px;
+	}
+
+	.error-item a {
+		color: var(--accent-strong);
+		font-weight: 800;
 	}
 
 	.notice-list,
@@ -306,7 +657,9 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 	}
 
 	.date-group[hidden],
-	.notice[hidden] {
+	.notice[hidden],
+	.category-filter[hidden],
+	.pagination[hidden] {
 		display: none;
 	}
 
@@ -364,8 +717,8 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 	.notice-meta span {
 		border: 1px solid var(--line);
 		border-radius: 999px;
-		padding: 2px 8px;
 		color: var(--accent-strong);
+		padding: 2px 8px;
 	}
 
 	h1 {
@@ -381,15 +734,60 @@ const dateGroups = Array.from(new Set(posts.map((post) => post.date))).map((date
 		line-height: 1.7;
 	}
 
+	mark {
+		border-radius: 4px;
+		background: color-mix(in srgb, #ffe36b, transparent 25%);
+		color: inherit;
+		padding: 0 2px;
+	}
+
 	.empty {
 		margin: 36px 0 0;
 		color: var(--muted);
 		text-align: center;
 	}
 
+	.pagination {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
+		margin-top: 18px;
+	}
+
+	:global(.pagination-status) {
+		color: var(--muted);
+		font-size: 0.86rem;
+		font-weight: 800;
+		margin-right: 4px;
+	}
+
+	:global(.page-button) {
+		color: var(--accent-strong);
+		min-width: 38px;
+		padding-inline: 10px;
+	}
+
+	:global(.page-button[aria-current="page"]) {
+		border-color: var(--accent);
+		background: var(--accent);
+		color: white;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 78%);
+	}
+
+	:global(.pagination-gap) {
+		display: inline-flex;
+		align-items: center;
+		height: 34px;
+		color: var(--muted);
+		font-weight: 800;
+		padding: 0 2px;
+	}
+
 	@media (max-width: 560px) {
 		.topbar-main {
-			align-items: flex-start;
+			align-items: stretch;
 			flex-direction: column;
 		}
 
