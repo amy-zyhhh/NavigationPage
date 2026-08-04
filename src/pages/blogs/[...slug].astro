@@ -236,6 +236,9 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 					const wrapper = document.createElement("div");
 					wrapper.className = "code-block";
 
+					const toolbar = document.createElement("div");
+					toolbar.className = "code-toolbar";
+
 					const copyButton = document.createElement("button");
 					copyButton.className = "code-copy";
 					copyButton.type = "button";
@@ -273,7 +276,8 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 
 					pre.dataset.enhanced = "true";
 					pre.parentNode?.insertBefore(wrapper, pre);
-					wrapper.append(copyButton, pre);
+					toolbar.append(copyButton);
+					wrapper.append(toolbar, pre);
 				});
 			}
 
@@ -719,12 +723,18 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		color: #1d2928;
 	}
 
-	.content :global(.code-copy) {
+	.content :global(.code-toolbar) {
 		position: sticky;
 		top: 58px;
 		z-index: 1;
-		justify-self: end;
-		margin: 8px 8px -36px 0;
+		display: flex;
+		justify-content: flex-end;
+		height: 0;
+		padding: 8px 8px 0;
+		pointer-events: none;
+	}
+
+	.content :global(.code-copy) {
 		border: 1px solid color-mix(in srgb, var(--line), transparent 10%);
 		border-radius: 999px;
 		background: color-mix(in srgb, #ffffff, transparent 6%);
@@ -737,6 +747,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		padding: 7px 10px;
 		box-shadow: 0 4px 14px rgba(29, 41, 40, 0.08);
 		backdrop-filter: blur(8px);
+		pointer-events: auto;
 		transition:
 			border-color 0.16s ease,
 			color 0.16s ease,
@@ -754,7 +765,7 @@ const sidebarStorageKey = "navigation-blog-sidebar-hidden";
 		margin: 0;
 		border: 0;
 		border-radius: 8px;
-		padding: 42px 0 14px;
+		padding: 40px 0 14px;
 		background: transparent !important;
 		color: #1d2928 !important;
 		counter-reset: code-line;
