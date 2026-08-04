@@ -17,47 +17,46 @@ summary: 一个 MATLAB 函数，用于批量读取 Maple 导出的 .m 文件，�
 function load_maple(names)
 % load_maple(names)
 %
-% Purpose:
-%   Read selected Maple-exported .m files from the current MATLAB folder.
-%   Each file is assumed to contain an assignment such as:
+% 功能：
+%   从当前 MATLAB 文件夹中读取指定的 Maple 导出的 .m 文件。
+%   每个文件假定包含类似下面的赋值语句：
 %
 %       KA = [...];
 %
-%   The function extracts the right-hand side, detects all symbolic variable
-%   names appearing in it, generates a declaration file maple_syms.m, runs
-%   that declaration file, evaluates the right-hand side, and assigns the
-%   result to the base workspace using the file name as the variable name.
+%   本函数会提取等号右侧表达式，自动检测其中出现的符号变量名，
+%   生成符号声明文件 maple_syms.m，运行该声明文件，对右侧表达式
+%   进行求值，并以文件名作为变量名，将结果写入 base 工作区。
 %
-% Usage:
+% 用法：
 %   load_maple(["KA", "fA", "KB", "fB", "RA", "RB"])
 %   load_maple(["KA.m", "fA.m"])
 %
-% Output:
-%   Creates variables KA, fA, KB, ... in the base workspace.
-%   Also creates maple_syms.m in the current folder.
+% 输出：
+%   在 base 工作区中生成 KA、fA、KB 等变量。
+%   同时会在当前文件夹中生成 maple_syms.m。
 
-    % Convert input names to string array.
+    % 将输入名称转换为字符串数组。
     names = string(names);
 
-    % Store extracted right-hand-side expressions.
+    % 保存从文件中提取出的右侧表达式。
     rhsList = strings(numel(names), 1);
 
-    % Store MATLAB variable names generated from file names.
+    % 保存由文件名生成的 MATLAB 变量名。
     baseNames = strings(numel(names), 1);
 
-    % Store actual file names with .m extension.
+    % 保存带 .m 后缀的实际文件名。
     fileNames = strings(numel(names), 1);
 
-    % Collect all symbolic variable names detected across all files.
+    % 收集所有文件中检测到的符号变量名。
     allVars = strings(0, 1);
 
     for k = 1:numel(names)
         inputName = names(k);
 
-        % Split input into base file name and extension.
+        % 将输入拆分为基础文件名和扩展名。
         [~, baseName, ext] = fileparts(inputName);
 
-        % Allow both "KA" and "KA.m".
+        % 同时允许输入 "KA" 和 "KA.m" 两种形式。
         if ext == ""
             fileName = baseName + ".m";
         else
@@ -66,60 +65,60 @@ function load_maple(names)
 
         filePath = fullfile(pwd, fileName);
 
-        % Skip missing files.
+        % 若文件不存在，则跳过。
         if ~isfile(filePath)
             warning("File not found: %s", filePath);
             continue;
         end
 
-        % Read the whole Maple-exported file as text.
+        % 将 Maple 导出的整个文件作为文本读取。
         txt = fileread(filePath);
 
-        % Locate the first assignment sign.
+        % 定位第一个赋值等号。
         eqPos = strfind(txt, '=');
         if isempty(eqPos)
             warning("No '=' found in %s. Skipped.", fileName);
             continue;
         end
 
-        % Keep only the right-hand side of the first assignment.
+        % 只保留第一个等号右侧的表达式。
         rhs = txt(eqPos(1) + 1:end);
         rhs = strtrim(rhs);
 
-        % Remove trailing content after the last semicolon.
+        % 删除最后一个分号之后的内容。
         semiPos = find(rhs == ';', 1, 'last');
         if ~isempty(semiPos)
             rhs = extractBefore(rhs, semiPos);
         end
 
-        % Convert Maple-style operators to MATLAB elementwise operators.
-        % This is safe for symbolic expressions and arrays.
+        % 将 Maple 风格的运算符转换为 MATLAB 按元素运算符。
+        % 对符号表达式和数组表达式而言，这样处理通常更稳妥。
         rhs = strrep(rhs, '^', '.^');
         rhs = strrep(rhs, '*', '.*');
         rhs = strrep(rhs, '/', './');
 
-        % Save expression and target variable name.
+        % 保存表达式和目标变量名。
         rhsList(k) = rhs;
         baseNames(k) = matlab.lang.makeValidName(baseName);
         fileNames(k) = fileName;
 
-        % Detect symbolic variables from this expression.
+        % 从当前表达式中检测符号变量。
         newVars = detect_vars(rhs);
 
-        % Force column shape to avoid vertical concatenation errors.
+        % 强制转为列向量，避免纵向拼接时报错。
         allVars = [allVars; newVars(:)];
     end
 
-    % Remove duplicate symbolic variable names.
+    % 删除重复的符号变量名。
     allVars = unique(allVars);
 
-    % Generate maple_syms.m in the current folder.
+    % 在当前文件夹中生成 maple_syms.m。
     write_syms_file(allVars, fullfile(pwd, "maple_syms.m"));
 
-    % Run symbolic declarations inside this function workspace.
+    % 在当前函数工作区中运行符号声明脚本。
     run(fullfile(pwd, "maple_syms.m"));
 
-    % Evaluate each expression and assign it to the base workspace.
+    % 对每个表达式求值，并将结果写入 base 工作区。
     for k = 1:numel(names)
         if rhsList(k) == ""
             continue;
@@ -129,15 +128,15 @@ function load_maple(names)
         rhs = rhsList(k);
 
         try
-            % Evaluate using symbols declared above.
+            % 使用前面声明的符号变量对表达式求值。
             val = eval(rhs);
 
-            % Put result into base workspace.
+            % 将结果放入 base 工作区。
             assignin('base', varName, val);
 
             fprintf("Loaded %s from %s\n", varName, fileNames(k));
         catch ME
-            % If evaluation fails, save the raw RHS string instead.
+            % 如果求值失败，则保存原始右侧表达式字符串。
             warning("Failed to evaluate %s. Saving RHS as text instead. Reason: %s", ...
                 fileNames(k), ME.message);
             assignin('base', varName, rhs);
@@ -150,18 +149,17 @@ end
 function vars = detect_vars(exprText)
 % detect_vars(exprText)
 %
-% Extract candidate variable names from a text expression.
-% Function names such as sin, cos, sqrt, etc. are removed.
+% 从文本表达式中提取候选变量名。
+% sin、cos、sqrt 等函数名会被排除。
 
-    % Match MATLAB-like names: start with a letter, followed by letters,
-    % digits, or underscores.
+    % 匹配 MATLAB 风格的变量名：以字母开头，后接字母、数字或下划线。
     tokens = regexp(exprText, '\<[A-Za-z]\w*\>', 'match');
 
-    % Convert to unique string column vector.
+    % 转换为唯一的字符串列向量。
     vars = unique(string(tokens));
     vars = vars(:);
 
-    % Reserved names that should not be declared as symbolic variables.
+    % 不应被声明为符号变量的保留名称。
     reserved = [
         "sin"; "cos"; "tan"; "asin"; "acos"; "atan"; ...
         "sinh"; "cosh"; "tanh"; ...
@@ -170,21 +168,21 @@ function vars = detect_vars(exprText)
         "i"; "j"
     ];
 
-    % Remove reserved names.
+    % 删除保留名称。
     vars = setdiff(vars, reserved);
 
-    % Keep only valid MATLAB variable names.
+    % 只保留合法的 MATLAB 变量名。
     vars = vars(arrayfun(@(s) isvarname(s), vars));
 
-    % Ensure column vector output.
+    % 保证输出为列向量。
     vars = vars(:);
 end
 
 function write_syms_file(vars, filePath)
 % write_syms_file(vars, filePath)
 %
-% Create a MATLAB script containing symbolic declarations.
-% Each variable is written on a separate line:
+% 创建一个包含符号变量声明的 MATLAB 脚本。
+% 每个变量单独写成一行：
 %
 %   syms A__n11
 %   syms r__0
@@ -203,7 +201,7 @@ function write_syms_file(vars, filePath)
         return;
     end
 
-    % Write one symbolic declaration per line.
+    % 每行写入一个符号变量声明。
     for k = 1:numel(vars)
         fprintf(fid, "syms %s\n", vars(k));
     end
