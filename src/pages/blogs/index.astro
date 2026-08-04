@@ -86,7 +86,7 @@ const dateGroups = Array.from(new Set(blogSearchPosts.map((post) => post.date)))
 			<p class="empty" id="emptyState" hidden>没有找到匹配的博客。</p>
 		</main>
 
-		<script>
+		<script data-astro-rerun>
 			function systemTheme() {
 				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 			}
