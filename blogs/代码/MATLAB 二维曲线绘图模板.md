@@ -14,10 +14,10 @@ summary: 一个用于绘制二维曲线、设置 Times New Roman 字体和 LaTeX
 ## 代码
 
 ```matlab
-% Plot two 2D curves from vumat.
-% vumat(:, 1): x data
-% vumat(:, 2): first y data
-% vumat(:, 3): second y data
+% 从 vumat 中绘制两条二维曲线。
+% vumat(:, 1)：横坐标数据
+% vumat(:, 2)：第一组纵坐标数据
+% vumat(:, 3)：第二组纵坐标数据
 
 figure("Position", [100, 100, 450, 300]);
 ax = axes;
@@ -61,7 +61,7 @@ ylabel(ax, "$\it{F}$ / N", ...
     "FontSize", 16, ...
     "Interpreter", "latex");
 
-% Optional axis limits.
+% 可选：设置坐标轴范围。
 % xlim(ax, [-1, 20]);
 % ylim(ax, [-2, 18]);
 ```

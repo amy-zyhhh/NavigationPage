@@ -14,17 +14,17 @@ summary: 一个用于沿 q 扫描 det(eqFactors)=0，并用 vpasolve 计算 lamb
 ## 代码
 
 ```matlab
-% Solve det(eqFactors) == 0 along q and collect lambda branches.
+% 沿 q 扫描 det(eqFactors) == 0，并收集 lambda 分支。
 %
-% Required symbolic variables:
+% 需要预先定义的符号变量：
 %   k0, k1, k2, q, lambda
 %
-% Required numeric parameters:
+% 需要预先给定的数值参数：
 %   k0N, k1N, k2N
 
-Nint = 100;                 % Number of intervals.
-numQ = Nint + 1;            % Number of q sample points.
-numBranches = 4;            % Expected number of lambda branches.
+Nint = 100;                 % 区间划分数量。
+numQ = Nint + 1;            % q 采样点数量。
+numBranches = 4;            % 预期保存的 lambda 分支数量。
 
 qValues = linspace(-pi, pi, numQ).';
 lambdaValues = nan(numQ, numBranches);

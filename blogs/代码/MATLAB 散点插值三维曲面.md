@@ -14,10 +14,10 @@ summary: 一个用于把散点数据插值到规则网格，并绘制三维曲�
 ## 代码
 
 ```matlab
-% Plot interpolated 3D surfaces from scattered data.
-% result(:, 1): x data
-% result(:, 2): y data
-% result(:, zColumns): z data to plot
+% 从散点数据插值并绘制三维曲面。
+% result(:, 1)：x 坐标数据
+% result(:, 2)：y 坐标数据
+% result(:, zColumns)：需要绘制的 z 数据列
 
 zColumns = 3:4;
 gridSize = 100;

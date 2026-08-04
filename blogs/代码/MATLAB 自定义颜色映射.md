@@ -14,7 +14,7 @@ summary: 两个 MATLAB 自定义 colormap 模板：双色渐变和多颜色点�
 ## 代码
 
 ```matlab
-% Example 1: two-color colormap.
+% 示例 1：双色渐变颜色映射。
 colorStart = [102, 178, 225] / 256;
 colorEnd = [0.98, 0.98, 0.98];
 numColors = 256;
@@ -22,26 +22,26 @@ numColors = 256;
 customMap = makeLinearColormap([colorStart; colorEnd], numColors);
 colormap(customMap);
 
-% Example 2: multi-point colormap.
+% 示例 2：多颜色点渐变颜色映射。
 colors = [
-    102/256, 178/256, 225/256;  % blue
-    0.2,     0.8,     0.2;      % green
-    1.0,     1.0,     0.0;      % yellow
-    1.0,     0.5,     0.0;      % orange
-    216/256, 30/256,  90/256    % magenta
+    102/256, 178/256, 225/256;  % 蓝色
+    0.2,     0.8,     0.2;      % 绿色
+    1.0,     1.0,     0.0;      % 黄色
+    1.0,     0.5,     0.0;      % 橙色
+    216/256, 30/256,  90/256    % 品红色
 ];
 
 customMap = makeLinearColormap(colors, numColors);
 colormap(customMap);
 
 function customMap = makeLinearColormap(colors, numColors)
-% makeLinearColormap creates a linearly interpolated colormap.
+% makeLinearColormap 用于生成线性插值的颜色映射。
 %
 % colors:
-%   n-by-3 RGB color points, with values in [0, 1].
+%   n 行 3 列的 RGB 颜色控制点，取值范围为 [0, 1]。
 %
 % numColors:
-%   Number of colors in the final colormap.
+%   最终颜色映射中的颜色数量。
 
     arguments
         colors (:, 3) double
