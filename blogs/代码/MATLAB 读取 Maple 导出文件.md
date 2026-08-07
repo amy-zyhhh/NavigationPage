@@ -1,425 +1,425 @@
 ---
-title: MATLAB 读取 Maple 导出文件
-date: 20260804
+title: MATLAB 运行 Maple 导出文件并处理索引符号
+date: 20260807
 category: 代码
-summary: 一个 MATLAB 函数，用于读取 Maple 导出的 .m 文件，转换索引变量，使用 str2sym 生成符号表达式，并返回结构体结果。
+summary: 使用 generate_indexed_symbol_helpers 生成 Maple 索引符号辅助函数，再用 run_maple_export 运行 Maple 导出的 MATLAB 文件并自动取回导出变量。
 ---
 
-# MATLAB 读取 Maple 导出文件
+# MATLAB 运行 Maple 导出文件并处理索引符号
 
-这段 MATLAB 函数 `load_maple` 用于读取 Maple 导出的 `.m` 文件，并把其中的右端表达式转换成 MATLAB 可继续处理的符号表达式。
+这套代码用于处理 Maple 导出的 MATLAB `.m` 文件，尤其适合导出表达式中包含 `A(1)`、`E(2)`、`r(3)`、`nu(1)` 这类索引符号的情况。
 
-新版代码不再使用 `eval` 求值，而是使用 `str2sym` 解析表达式；同时会把 `A(4,1,3)`、`E(2)`、`r(3)`、`nu(1)` 这类 Maple 风格的索引变量转换成合法 MATLAB 符号变量名，例如 `A_4_1_3`、`E_2`、`r_3`、`nu_1`。函数会返回结构体 `S`，也会把结果同步写入 base workspace。
+整体思路分为两步：
 
-## 代码
+1. 用 `generate_indexed_symbol_helpers` 扫描 Maple 导出文件，自动生成索引符号声明文件和 helper 函数。
+2. 用 `run_maple_export` 执行 Maple 导出的 `.m` 文件，并把导出的变量自动取回。
+
+建议把下面两段代码分别保存为：
+
+- `generate_indexed_symbol_helpers.m`
+- `run_maple_export.m`
+
+## 使用示例
 
 ```matlab
-function S = load_maple(names)
-% load_maple(names)
+info = generate_indexed_symbol_helpers("KA.m");
+
+run("maple_indexed_syms.m");
+addpath(info.helperDir);
+
+K = run_maple_export("KA");
+```
+
+其中：
+
+- `KA.m` 是 Maple 导出的 MATLAB 文件。
+- `maple_indexed_syms.m` 由 `generate_indexed_symbol_helpers` 自动生成。
+- `info.helperDir` 是自动生成的 helper 函数目录。
+- `run_maple_export("KA")` 会自动补全 `.m` 后缀，并运行当前路径下的 `KA.m`。
+
+`maple_indexed_syms.m` 里已经包含一次 `addpath(...)`，因此示例中的 `addpath(info.helperDir)` 通常是重复但无害的。保留这一句的好处是更直观，也能避免手动移动文件后路径没有加入的问题。
+
+## 代码一：生成索引符号 helper
+
+```matlab
+function info = generate_indexed_symbol_helpers(inputFiles, varargin)
+% generate_indexed_symbol_helpers(inputFiles)
 %
 % 功能：
-%   读取 Maple 导出的 .m 文件，并转换为 MATLAB 符号表达式。
+%   从 Maple 导出的 MATLAB 文件中提取 r(1)、E(2)、nu(1)、A(2,3,4)
+%   这类索引函数调用，并自动生成：
+%     1. 符号变量声明文件 maple_indexed_syms.m；
+%     2. helper 函数文件 r.m、E.m、nu.m、A.m 等。
 %
-% 特点：
-%   1. 不使用 eval，使用 str2sym 解析符号表达式；
-%   2. 将 A(4,1,3)、E(2)、r(3)、nu(1) 等转换为 A_4_1_3、E_2、r_3、nu_1；
-%   3. 自动处理 BesselI -> besseli，Pi -> pi，ln -> log；
-%   4. 输出索引变量转换记录；
-%   5. 将所有符号变量声明写入 maple_syms.m；
-%   6. 返回结构体 S，同时写入 base workspace。
-%
-% 用法：
-%   S = load_maple(["K", "f", "R"]);
-%   run("maple_syms.m");
-%   K = S.K;
-%   f = S.f;
-%   R = S.R;
-
-    names = string(names);
-    S = struct();
-
-    allConverted = strings(0, 2);
-    allVars = strings(0, 1);
-
-    for k = 1:numel(names)
-        inputName = names(k);
-
-        % 允许输入 "K" 或 "K.m"。
-        [~, baseName, ext] = fileparts(inputName);
-
-        if ext == ""
-            fileName = baseName + ".m";
-        else
-            fileName = baseName + ext;
-        end
-
-        filePath = fullfile(pwd, fileName);
-
-        if ~isfile(filePath)
-            warning("文件不存在：%s", filePath);
-            continue;
-        end
-
-        % 读取 Maple 导出的文件内容。
-        txt = fileread(filePath);
-
-        % 提取等号右边表达式。
-        rhs = extract_rhs(txt);
-
-        % 转换表达式文本，并记录被转换的索引变量。
-        [rhs, converted] = normalize_maple_text(rhs);
-
-        converted = unique(converted, "rows");
-        allConverted = [allConverted; converted]; %#ok<AGROW>
-
-        if ~isempty(converted)
-            fprintf("文件 %s 中转换了以下索引变量：\n", fileName);
-            for j = 1:size(converted, 1)
-                fprintf("  %s  ->  %s\n", converted(j, 1), converted(j, 2));
-            end
-        end
-
-        % 检测当前表达式中的符号变量。
-        vars = detect_symbol_vars(rhs);
-        allVars = [allVars; vars(:)]; %#ok<AGROW>
-
-        varName = matlab.lang.makeValidName(baseName);
-
-        try
-            % 将文本解析为符号表达式。
-            val = str2sym(rhs);
-
-            % 保存到结构体。
-            S.(varName) = val;
-
-            % 同时保存到 base workspace。
-            assignin("base", varName, val);
-
-            fprintf("已载入 %s -> %s\n", fileName, varName);
-
-        catch ME
-            warning("解析 %s 失败，已保存转换后的文本。原因：%s", ...
-                fileName, ME.message);
-
-            S.(varName) = rhs;
-            assignin("base", varName, rhs);
-        end
-    end
-
-    allConverted = unique(allConverted, "rows");
-    allVars = unique(allVars);
-
-    % 输出总转换记录。
-    if ~isempty(allConverted)
-        fprintf("\n全部索引变量转换汇总：\n");
-        for j = 1:size(allConverted, 1)
-            fprintf("  %s  ->  %s\n", allConverted(j, 1), allConverted(j, 2));
-        end
-    end
-
-    % 写入符号变量声明文件。
-    symsFile = fullfile(pwd, "maple_syms.m");
-    write_symbol_file(allVars, symsFile);
-
-    fprintf("\n共检测到 %d 个符号变量。\n", numel(allVars));
-    fprintf("符号变量声明已写入：%s\n", symsFile);
-    fprintf("可在 MATLAB 命令行运行：run('maple_syms.m')\n");
-
-    fprintf("\n已完成表达式载入。\n");
-end
-
-function rhs = extract_rhs(txt)
-% 提取 Maple 导出文件中第一个等号右边的表达式。
-
-    eqPos = strfind(txt, '=');
-
-    if isempty(eqPos)
-        error("文件中没有找到等号。");
-    end
-
-    rhs = txt(eqPos(1) + 1:end);
-    rhs = strtrim(rhs);
-
-    % 去掉最后一个分号及其后的内容。
-    semiPos = find(rhs == ';', 1, 'last');
-
-    if ~isempty(semiPos)
-        rhs = extractBefore(rhs, semiPos);
-    end
-
-    rhs = char(rhs);
-end
-
-function [txt, converted] = normalize_maple_text(txt)
-% 将 Maple/MATLAB 导出的表达式文本转换为适合 str2sym 的格式。
-
-    txt = char(txt);
-
-    % Maple 函数名转换为 MATLAB 符号工具箱可识别的函数名。
-    txt = regexprep(txt, '\bBesselI\s*\(', 'besseli(');
-
-    % Maple 常数 Pi 转为 MATLAB pi。
-    txt = regexprep(txt, '\bPi\b', 'pi');
-
-    % Maple 的 ln(...) 转为 MATLAB 的 log(...)。
-    txt = regexprep(txt, '\bln\s*\(', 'log(');
-
-    % 只转换明确作为索引变量的名字。
-    indexedNames = ["A", "E", "r", "nu"];
-
-    [txt, converted] = flatten_indexed_symbols(txt, indexedNames);
-
-    % str2sym 使用普通符号运算符即可。
-    txt = strrep(txt, '.^', '^');
-    txt = strrep(txt, '.*', '*');
-    txt = strrep(txt, './', '/');
-
-    txt = string(txt);
-end
-
-function [txt, converted] = flatten_indexed_symbols(txt, indexedNames)
-% 将白名单中的索引变量转换为普通符号变量名。
+% 生成 helper 后，A(1,2,3) 会返回 sym('A_1_2_3')。
 %
 % 示例：
-%   A(4,1,3) -> A_4_1_3
-%   E(2)     -> E_2
-%   r(3)     -> r_3
+%   info = generate_indexed_symbol_helpers("KA.m");
+%   run("maple_indexed_syms.m");
+%   addpath(info.helperDir);
+%   K = run_maple_export("KA");
+%
+% 可选参数：
+%   "IndexedNames" : 需要识别的索引函数名，默认 ["A","E","r","nu"]
+%   "HelperDir"    : helper 函数输出目录，默认 "maple_indexed_helpers"
+%   "SymsFile"     : 符号声明文件名，默认 "maple_indexed_syms.m"
+
+    p = inputParser;
+    addRequired(p, "inputFiles");
+    addParameter(p, "IndexedNames", ["A", "E", "r", "nu"]);
+    addParameter(p, "HelperDir", "maple_indexed_helpers");
+    addParameter(p, "SymsFile", "maple_indexed_syms.m");
+    parse(p, inputFiles, varargin{:});
+
+    inputFiles = string(p.Results.inputFiles);
+    indexedNames = string(p.Results.IndexedNames);
+    helperDir = string(p.Results.HelperDir);
+    symsFile = string(p.Results.SymsFile);
+
+    if ~isfolder(helperDir)
+        mkdir(helperDir);
+    end
+
+    calls = strings(0, 3);
+
+    for k = 1:numel(inputFiles)
+        filePath = inputFiles(k);
+
+        if ~isfile(filePath)
+            error("文件不存在：%s", filePath);
+        end
+
+        txt = fileread(filePath);
+        calls = [calls; extract_indexed_calls(txt, indexedNames)]; %#ok<AGROW>
+    end
+
+    calls = unique(calls, "rows");
+
+    flatNames = calls(:, 3);
+    flatNames = unique(flatNames);
+
+    write_syms_file(flatNames, symsFile, calls, helperDir);
+
+    usedNames = unique(calls(:, 1));
+    for k = 1:numel(usedNames)
+        write_indexed_helper_function(usedNames(k), fullfile(helperDir, usedNames(k) + ".m"));
+    end
+
+    info = struct();
+    info.calls = calls;
+    info.flatNames = flatNames;
+    info.helperDir = char(fullfile(pwd, helperDir));
+    info.symsFile = char(fullfile(pwd, symsFile));
+
+    fprintf("已提取 %d 个索引调用。\n", size(calls, 1));
+    fprintf("已生成 %d 个符号变量。\n", numel(flatNames));
+    fprintf("符号声明文件：%s\n", info.symsFile);
+    fprintf("helper 函数目录：%s\n", info.helperDir);
+    fprintf("主程序中建议先运行：\n");
+    fprintf("  run('%s');\n", symsFile);
+    fprintf("  addpath('%s');\n", helperDir);
+end
+
+function calls = extract_indexed_calls(txt, indexedNames)
 
     txt = char(txt);
     indexedNames = string(indexedNames);
+    calls = strings(0, 3);
 
-    converted = strings(0, 2);
-
-    for n = 1:numel(indexedNames)
-        name = indexedNames(n);
-
-        % 匹配 A(...)、E(...)、r(...) 等白名单索引变量。
+    for k = 1:numel(indexedNames)
+        name = indexedNames(k);
         pattern = "\<" + name + "\s*\(([^()]*)\)";
         pattern = char(pattern);
 
-        while true
-            [startIdx, endIdx, tokens] = regexp(txt, pattern, ...
-                'start', 'end', 'tokens', 'once');
+        [startIdx, endIdx, tokens] = regexp(txt, pattern, "start", "end", "tokens");
 
-            if isempty(startIdx)
-                break;
+        for j = 1:numel(tokens)
+            raw = string(txt(startIdx(j):endIdx(j)));
+            args = string(strtrim(tokens{j}{1}));
+
+            if ~is_numeric_index_list(args)
+                continue;
             end
 
-            rawText = string(txt(startIdx:endIdx));
-            args = string(tokens{1});
+            flatName = make_flat_symbol_name(name, args);
+            calls(end+1, :) = [name, raw, string(flatName)]; %#ok<AGROW>
+        end
+    end
+end
 
-            newName = make_flat_symbol_name(name, args);
+function tf = is_numeric_index_list(args)
 
-            converted(end+1, :) = [rawText, string(newName)]; %#ok<AGROW>
+    args = char(args);
+    pieces = regexp(args, ",", "split");
+    tf = true;
 
-            txt = [txt(1:startIdx-1), newName, txt(endIdx+1:end)];
+    for k = 1:numel(pieces)
+        s = strtrim(pieces{k});
+        if isempty(regexp(s, '^[+-]?\d+$', 'once'))
+            tf = false;
+            return;
         end
     end
 end
 
 function newName = make_flat_symbol_name(name, args)
-% 根据索引变量名和索引内容生成普通符号变量名。
 
     name = char(name);
     args = char(args);
 
-    % 删除空格。
     args = regexprep(args, '\s+', '');
-
-    % 将索引中的特殊符号转换成合法变量名的一部分。
     args = strrep(args, ',', '_');
     args = strrep(args, '+', 'p');
     args = strrep(args, '-', 'm');
-    args = strrep(args, '*', '_');
-    args = strrep(args, '/', '_');
 
-    % 拼接并确保是合法 MATLAB 变量名。
     newName = matlab.lang.makeValidName([name, '_', args]);
 end
 
-function vars = detect_symbol_vars(exprText)
-% 检测表达式文本中的符号变量名。
+function write_syms_file(flatNames, symsFile, calls, helperDir)
 
-    exprText = char(exprText);
-
-    % 提取所有 MATLAB 变量名格式的 token。
-    tokens = regexp(exprText, '\<[A-Za-z]\w*\>', 'match');
-
-    vars = unique(string(tokens));
-    vars = vars(:);
-
-    % 不应声明为符号变量的函数名和常数。
-    reserved = [
-        "sin"; "cos"; "tan"; "asin"; "acos"; "atan"; ...
-        "sinh"; "cosh"; "tanh"; ...
-        "exp"; "log"; "sqrt"; ...
-        "besseli"; "besselj"; "besselk"; "bessely"; ...
-        "pi"; "inf"; "Inf"; "nan"; "NaN"; ...
-        "i"; "j"
-    ];
-
-    vars = setdiff(vars, reserved);
-
-    % 排除仍然作为函数调用出现的名字。
-    funcTokens = regexp(exprText, '\<([A-Za-z]\w*)\s*\(', 'tokens');
-
-    if ~isempty(funcTokens)
-        funcs = unique(string([funcTokens{:}]));
-        funcs = setdiff(funcs, reserved);
-        vars = setdiff(vars, funcs);
+    fid = fopen(symsFile, "w");
+    if fid < 0
+        error("无法创建文件：%s", symsFile);
     end
 
-    % 只保留合法变量名。
-    vars = vars(arrayfun(@(s) isvarname(s), vars));
-    vars = vars(:);
+    cleanup = onCleanup(@() fclose(fid));
+
+    fprintf(fid, "%% Auto-generated by generate_indexed_symbol_helpers.m\n");
+    fprintf(fid, "%% Maple 索引符号变量声明文件\n\n");
+
+    fprintf(fid, "addpath('%s');\n\n", char(helperDir));
+
+    for k = 1:numel(flatNames)
+        v = char(flatNames(k));
+        fprintf(fid, "%s = sym('%s');\n", v, v);
+    end
+
+    fprintf(fid, "\n%% 索引调用记录：原始调用 -> 普通符号\n");
+    for k = 1:size(calls, 1)
+        fprintf(fid, "%% %s -> %s\n", calls(k, 2), calls(k, 3));
+    end
 end
 
-function write_symbol_file(vars, filePath)
-% 将符号变量声明写入 .m 文件。
+function write_indexed_helper_function(funcName, filePath)
+
+    funcName = char(funcName);
 
     fid = fopen(filePath, "w");
-
     if fid < 0
         error("无法创建文件：%s", filePath);
     end
 
-    fprintf(fid, "%% Auto-generated by load_maple.m\n");
-    fprintf(fid, "%% Maple 符号变量声明文件\n\n");
+    cleanup = onCleanup(@() fclose(fid));
 
-    if isempty(vars)
-        fprintf(fid, "%% 未检测到符号变量。\n");
-        fclose(fid);
-        return;
-    end
+    fprintf(fid, "function out = %s(varargin)\n", funcName);
+    fprintf(fid, "%% Auto-generated indexed-symbol helper.\n");
+    fprintf(fid, "%% Example: %s(1,2,3) returns sym('%s_1_2_3').\n\n", funcName, funcName);
+    fprintf(fid, "    if nargin < 1\n");
+    fprintf(fid, "        error('%s requires at least one index.');\n", funcName);
+    fprintf(fid, "    end\n\n");
+    fprintf(fid, "    parts = cell(1, nargin);\n");
+    fprintf(fid, "    for k = 1:nargin\n");
+    fprintf(fid, "        idx = varargin{k};\n");
+    fprintf(fid, "        if ~isscalar(idx) || idx ~= fix(idx)\n");
+    fprintf(fid, "            error('%s indices must be integer scalars.');\n", funcName);
+    fprintf(fid, "        end\n");
+    fprintf(fid, "        parts{k} = index_to_name_part(idx);\n");
+    fprintf(fid, "    end\n\n");
+    fprintf(fid, "    out = sym(['%s_', strjoin(parts, '_')]);\n", funcName);
+    fprintf(fid, "end\n\n");
 
-    for k = 1:numel(vars)
-        v = char(vars(k));
-
-        % 使用 sym('变量名')，避免 syms 与已有函数名冲突。
-        fprintf(fid, "%s = sym('%s');\n", v, v);
-    end
-
-    fclose(fid);
+    fprintf(fid, "function part = index_to_name_part(idx)\n");
+    fprintf(fid, "    if idx < 0\n");
+    fprintf(fid, "        part = ['m', num2str(abs(idx))];\n");
+    fprintf(fid, "    else\n");
+    fprintf(fid, "        part = num2str(idx);\n");
+    fprintf(fid, "    end\n");
+    fprintf(fid, "end\n");
 end
 ```
 
-## 参数
-
-- `names`：需要读取的 Maple 导出文件名列表。可以写成不带扩展名的形式，例如 `"K"`，也可以写成带扩展名的形式，例如 `"K.m"`。
-
-推荐调用方式：
+## 代码二：运行 Maple 导出文件
 
 ```matlab
-S = load_maple(["K", "f", "R"]);
+function value = run_maple_export(fileName, filePath)
+
+    if nargin < 2 || isempty(filePath)
+        filePath = pwd;
+    end
+
+    fileName = char(fileName);
+    filePath = char(filePath);
+
+    [~, preferredName, ext] = fileparts(fileName);
+
+    preferredName = char(preferredName);
+    ext = char(ext);
+
+    if isempty(ext)
+        ext = '.m';
+    end
+
+    fullFile = fullfile(filePath, [preferredName, ext]);
+    fullFile = char(fullFile);
+
+    if ~isfile(fullFile)
+        error('Maple export file does not exist: %s', fullFile);
+    end
+
+    beforeVars = string(who);
+
+    run(fullFile);
+
+    afterVars = string(who);
+    newVars = setdiff(afterVars, beforeVars, 'stable');
+
+    if exist(preferredName, 'var')
+        value = eval(preferredName);
+        return;
+    end
+
+    if exist('cg', 'var')
+        value = cg;
+        return;
+    end
+
+    cgVars = newVars(~cellfun(@isempty, regexp(cellstr(newVars), '^cg\d+$', 'once')));
+
+    if numel(cgVars) == 1
+        value = eval(char(cgVars(1)));
+        return;
+    elseif numel(cgVars) > 1
+        error('Multiple cg-number variables found in %s: %s', ...
+            fullFile, char(strjoin(cgVars, ', ')));
+    end
+
+    if exist('ans', 'var')
+        value = ans;
+        return;
+    end
+
+    if numel(newVars) == 1
+        value = eval(char(newVars(1)));
+        return;
+    end
+
+    error('Cannot identify exported variable from %s. Expected %s, cg, cg0/cg1/..., ans, or exactly one new variable.', ...
+        fullFile, preferredName);
+end
 ```
 
-## 返回值或输出
+## 运行顺序说明
 
-函数返回结构体 `S`。每个字段名来自对应的文件名，例如 `K.m` 会写入 `S.K`。
-
-同时，函数还会产生这些输出：
-
-- 将成功解析的结果写入 base workspace，例如变量 `K`、`f`、`R`。
-- 在当前 MATLAB 文件夹中生成 `maple_syms.m`。
-- 在命令行打印索引变量转换记录，例如 `A(4,1,3) -> A_4_1_3`。
-- 如果某个表达式无法被 `str2sym` 解析，会把转换后的文本保存到 `S` 和 base workspace 中，并给出 warning。
-
-## 处理流程
-
-1. 统一文件名格式
-
-   ```matlab
-   [~, baseName, ext] = fileparts(inputName);
-   ```
-
-   函数允许输入 `"K"` 或 `"K.m"`。如果没有扩展名，会自动补上 `.m`。
-
-2. 提取右端表达式
-
-   ```matlab
-   rhs = extract_rhs(txt);
-   ```
-
-   `extract_rhs` 会找到第一个等号，并保留等号右边、最后一个分号之前的内容。
-
-3. 转换 Maple 表达式文本
-
-   ```matlab
-   [rhs, converted] = normalize_maple_text(rhs);
-   ```
-
-   这一步会处理 Maple 与 MATLAB 的语法差异，例如：
-
-   - `BesselI(...)` 转为 `besseli(...)`。
-   - `Pi` 转为 `pi`。
-   - `ln(...)` 转为 `log(...)`。
-   - `A(4,1,3)` 这类索引变量转为 `A_4_1_3`。
-
-4. 将索引变量扁平化
-
-   ```matlab
-   [txt, converted] = flatten_indexed_symbols(txt, indexedNames);
-   ```
-
-   当前白名单为 `["A", "E", "r", "nu"]`。只有这些名字后面的括号索引会被当成索引变量转换，避免误伤普通函数调用。
-
-5. 检测符号变量
-
-   ```matlab
-   vars = detect_symbol_vars(rhs);
-   ```
-
-   函数会提取表达式中的变量名，并排除 `sin`、`cos`、`sqrt`、`besseli`、`pi` 等函数名或常数。
-
-6. 使用 `str2sym` 解析表达式
-
-   ```matlab
-   val = str2sym(rhs);
-   ```
-
-   这是新版代码的核心变化：不再使用 `eval`，而是让 Symbolic Math Toolbox 解析文本表达式。
-
-7. 写入结构体和 base workspace
-
-   ```matlab
-   S.(varName) = val;
-   assignin("base", varName, val);
-   ```
-
-   这样既可以通过 `S.K` 访问结果，也可以直接在 base workspace 中使用变量 `K`。
-
-8. 生成符号变量声明文件
-
-   ```matlab
-   write_symbol_file(allVars, symsFile);
-   ```
-
-   `maple_syms.m` 中使用 `变量名 = sym('变量名');` 的形式声明变量，避免 `syms` 与已有函数名冲突。
-
-## 适合使用的场景
-
-- Maple 导出的表达式中含有 `A(4,1,3)`、`E(2)`、`r(3)` 这类索引变量。
-- 不希望使用 `eval`，想用更明确的 `str2sym` 解析符号表达式。
-- 需要同时得到结构体结果和 base workspace 变量。
-- 需要记录 Maple 索引变量到 MATLAB 合法变量名的转换关系。
-
-## 注意事项
-
-- 函数依赖 Symbolic Math Toolbox，因为使用了 `str2sym` 和 `sym`。
-- 当前只会扁平化白名单中的索引变量：`A`、`E`、`r`、`nu`。如果还有其他索引变量，需要加入 `indexedNames`。
-- `extract_rhs` 默认使用第一个等号右边作为表达式，并截断到最后一个分号之前。
-- `maple_syms.m` 会写入当前 MATLAB 文件夹；如果已有同名文件，会被覆盖。
-- `str2sym` 对表达式语法比较敏感。如果 Maple 导出文本中有未处理的特殊函数或语法，需要继续在 `normalize_maple_text` 中补充转换规则。
-
-## 示例
+推荐的完整流程是：
 
 ```matlab
-S = load_maple(["K", "f", "R"]);
-run("maple_syms.m");
+info = generate_indexed_symbol_helpers("KA.m");
 
-K = S.K;
-f = S.f;
-R = S.R;
+run("maple_indexed_syms.m");
+addpath(info.helperDir);
+
+K = run_maple_export("KA");
 ```
 
-运行后，函数会读取当前文件夹中的 `K.m`、`f.m` 和 `R.m`，将表达式转换为符号对象，保存到结构体 `S`，并同步写入 base workspace。
+第一行会扫描 `KA.m` 中出现的索引调用。例如：
+
+```matlab
+A(1)
+E(2)
+r(3)
+nu(1)
+```
+
+如果这些调用的索引都是整数，程序会生成普通符号名：
+
+```matlab
+A_1
+E_2
+r_3
+nu_1
+```
+
+同时生成同名 helper 函数。例如自动生成的 `A.m` 会让：
+
+```matlab
+A(1,2,3)
+```
+
+返回：
+
+```matlab
+sym('A_1_2_3')
+```
+
+这样 Maple 导出的文件中即使保留 `A(1)` 这种形式，MATLAB 执行时也能通过 helper 函数得到对应符号对象。
+
+## `run_maple_export` 的取值规则
+
+`run_maple_export("KA")` 会在当前目录寻找：
+
+```matlab
+KA.m
+```
+
+如果文件不在当前目录，可以写成：
+
+```matlab
+K = run_maple_export("KA", "D:\your\folder");
+```
+
+执行导出文件后，函数按以下优先级判断返回值：
+
+1. 如果存在和文件同名的变量，例如 `KA`，返回 `KA`。
+2. 如果存在变量 `cg`，返回 `cg`。
+3. 如果只存在一个 `cg0`、`cg1`、`cg2` 这类变量，返回它。
+4. 如果存在 `ans`，返回 `ans`。
+5. 如果运行文件后只新增了一个变量，返回这个新变量。
+6. 如果仍无法判断，就报错并提示无法识别导出变量。
+
+这个优先级适合 Maple 常见的 MATLAB 导出形式：有些文件会把表达式赋给和文件同名的变量，有些会赋给 `cg` 或 `cg0`。
+
+## 两段代码是否能配合使用
+
+按你给出的调用方式：
+
+```matlab
+info = generate_indexed_symbol_helpers("KA.m");
+
+run("maple_indexed_syms.m");
+addpath(info.helperDir);
+
+K = run_maple_export("KA");
+```
+
+这套流程在以下条件满足时可以正常使用：
+
+- `generate_indexed_symbol_helpers.m` 和 `run_maple_export.m` 都在 MATLAB 当前路径或已加入路径。
+- `KA.m` 位于当前工作目录，或者在调用 `run_maple_export` 时显式传入 `filePath`。
+- `KA.m` 中的索引符号名属于默认白名单 `["A","E","r","nu"]`，或你通过 `"IndexedNames"` 补充了其他名字。
+- 索引是整数，例如 `A(1)`、`A(2,3)`、`A(-1)`；如果索引里出现符号或表达式，例如 `A(i)`、`A(n+1)`，当前扫描函数会跳过。
+- MATLAB 安装了 Symbolic Math Toolbox，因为 helper 函数使用 `sym(...)`。
+
+需要特别注意一件事：`run_maple_export` 是函数，不是脚本，所以它运行 `KA.m` 时使用的是自己的函数工作区。由 helper 函数生成的 `A(1)`、`E(2)`、`r(3)`、`nu(1)` 这类符号可以正常返回 `sym(...)`；但如果 `KA.m` 里还直接使用了未定义的普通符号变量，例如 `lambda`、`q`、`theta`，这些变量不会自动从 base workspace 传入 `run_maple_export` 的函数工作区。遇到这种情况，需要在 `KA.m` 内部声明这些符号，或把 `run_maple_export` 扩展为先运行一个普通符号声明文件。
+
+## 常见扩展
+
+如果 Maple 文件中还有其他索引符号，例如 `B(1)`、`C(2,3)`，可以这样调用：
+
+```matlab
+info = generate_indexed_symbol_helpers( ...
+    "KA.m", ...
+    "IndexedNames", ["A", "B", "C", "E", "r", "nu"] ...
+);
+```
+
+如果要一次扫描多个 Maple 导出文件：
+
+```matlab
+info = generate_indexed_symbol_helpers(["KA.m", "KB.m", "f.m"]);
+```
+
+这样会把多个文件里出现过的索引符号统一收集到同一个 `maple_indexed_syms.m` 和 helper 目录中。
+
+## 小结
+
+这版做法不再把 Maple 导出表达式改写成另一份文本，而是尽量保留原始导出文件，通过自动生成的 helper 函数让 MATLAB 能理解 Maple 风格的索引符号。`generate_indexed_symbol_helpers` 负责准备符号环境，`run_maple_export` 负责运行导出文件并取回结果。只要 Maple 导出文件中的普通符号也能被正确声明，这两段代码和示例导入流程就是可以正常使用的。
