@@ -15,6 +15,13 @@
   order: 100
   pinned: true
   icon: amy-zyhhh.github.io
+- name: connect
+  url: https://connect.garmin.cn/app/home
+  category: 其他
+  description: Garmin Connect 页面入口。
+  tag: 运动
+  order: 110
+  icon: connect.garmin.cn
 - name: login
   url: https://login.tsinghua.edu.cn
   category: 清华入口

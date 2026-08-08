@@ -12,7 +12,11 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
 	: `${import.meta.env.BASE_URL}/`;
 const links = parseYamlLinks(protectedLinksYaml);
 const sortedLinks = [...links].sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999) || a.name.localeCompare(b.name));
-const categories = Array.from(new Set(sortedLinks.map((link) => link.category)));
+const categories = Array.from(new Set(sortedLinks.map((link) => link.category))).sort((a, b) => {
+	if (a === "其他") return 1;
+	if (b === "其他") return -1;
+	return 0;
+});
 const groups = categories.map((category) => ({
 	category,
 	links: sortedLinks.filter((link) => link.category === category),
